@@ -13,6 +13,61 @@ MyToob is a native macOS video client that organizes and discovers YouTube video
 - Full computer vision/ASR allowed only for local files
 - Two distributions: App Store SKU (strict compliance) and notarized DMG (power-user features)
 
+## 🔧 MCP Tools Quick Reference
+
+**CRITICAL:** This project has extensive MCP tooling configured. Before writing code, reading files, or running commands, check if an MCP tool can do it better!
+
+### Essential MCP Tools (Use These First!)
+- **`mcp__serena__*`** - Semantic code navigation & refactoring (ALWAYS use `get_symbols_overview` before reading files)
+- **`mcp__xcodemcp__*`** - Build, test, and analyze Xcode projects (use instead of raw xcodebuild)
+- **`mcp__apple-docs-mcp__*`** - Apple documentation & WWDC content (`search_apple_docs`, `get_wwdc_video`)
+- **`mcp__RepoPrompt__*`** - Multi-file context management (`manage_selection` for smart context windows)
+- **`mcp__filesystem__*`** - File operations (`read_text_file`, `write_file`, `search_files`)
+- **`mcp__octocode-mcp__*`** - GitHub code research (`githubSearchCode`, `githubGetFileContent`)
+
+### Quick Decision Tree
+
+**Before ANY action, ask yourself:**
+
+1. **Need to understand code?**
+   - ✅ `mcp__serena__get_symbols_overview` (fast, token-efficient)
+   - ❌ DON'T immediately read full file
+
+2. **Need to build/test?**
+   - ✅ `mcp__xcodemcp__xcode_build` / `mcp__xcodemcp__xcode_test`
+   - ❌ DON'T use raw `xcodebuild` commands
+
+3. **Need Apple documentation?**
+   - ✅ `mcp__apple-docs-mcp__search_apple_docs`
+   - ❌ DON'T use WebSearch for Apple APIs
+
+4. **Need multi-file context?**
+   - ✅ `mcp__RepoPrompt__manage_selection` (auto-adds related files)
+   - ❌ DON'T manually read multiple files
+
+5. **Need to search GitHub for examples?**
+   - ✅ `mcp__octocode-mcp__githubSearchCode`
+   - ❌ DON'T use WebSearch for code examples
+
+6. **Need to search this codebase?**
+   - ✅ `mcp__serena__search_for_pattern` or `mcp__RepoPrompt__file_search`
+   - ❌ DON'T use bash grep/find
+
+### MCP-First Development Workflow
+
+```
+1. Understand → serena.get_symbols_overview
+2. Navigate   → serena.find_symbol
+3. Context    → RepoPrompt.manage_selection
+4. Research   → apple-docs-mcp.search_apple_docs
+5. Edit       → serena.replace_symbol_body
+6. Build      → xcodemcp.xcode_build
+7. Test       → xcodemcp.xcode_test
+8. Analyze    → xcodemcp.xcresult_browse
+```
+
+📘 **Full MCP Documentation:** See [MCP Server Tooling Guide](#mcp-server-tooling-guide) section below for complete documentation and advanced usage patterns.
+
 ## Apple Platform Standards
 
 **CRITICAL:** All code, design, and implementation must strictly align with:
