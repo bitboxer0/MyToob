@@ -109,4 +109,50 @@ Display all available MCP tools for this project and when to use them.
 
 ---
 
+## 🎯 Serena vs RepoPrompt: When to Use Which
+
+**You are working on a macOS app in a large Swift/SwiftUI/AppKit codebase.**
+
+You have TWO high-level MCP servers for code work:
+
+1) **Serena** ("serena") - IDE brain with LSP for symbolic code operations
+2) **RepoPrompt** ("RepoPrompt") - Context manager + planning + safe edits
+
+**They are NOT interchangeable!**
+
+### Quick Rules
+
+**Use SERENA when you need:**
+- Symbol-level navigation (find types, methods, references)
+- Refactoring (API changes, updating call sites)
+- Precise edits inside known code
+- **Think:** "IDE navigation + structural edits"
+
+**Use REPOPROMPT when you need:**
+- Context curation (select files for a feature/bugfix)
+- Multi-step planning (architecture changes, new features)
+- Safe cross-cutting changes (reviewable diffs)
+- **Think:** "Pick files + plan + apply diffs"
+
+### Combo Pattern (Default for Complex Tasks)
+
+1. **RepoPrompt first** - Inspect tree, search, build file selection, plan
+2. **Serena next** - Navigate symbols, find references, make precise edits
+3. **RepoPrompt again** - Apply multi-file diffs, review changes
+
+### Conflict Resolution
+
+- Task mentions **REFACTOR, RENAME, FIND REFERENCES, UPDATE CALL SITES**? → **Serena**
+- Task mentions **PLAN, SELECT FILES, CONTEXT, LARGE EDIT, DIFF**? → **RepoPrompt**
+- Big task with both? → Start RepoPrompt (plan) → Serena (edits) → RepoPrompt (diffs)
+
+**Do NOT use both blindly for the same subtask. Choose ONE based on rules above.**
+
+### Safety
+
+- Never do large sweeping edits with Serena alone without planning
+- For multi-file/architectural changes: RepoPrompt (plan) → Serena (edit) → tests
+
+---
+
 **For complete documentation, see the "MCP Server Tooling Guide" section in CLAUDE.md**

@@ -68,6 +68,136 @@ MyToob is a native macOS video client that organizes and discovers YouTube video
 
 📘 **Full MCP Documentation:** See [MCP Server Tooling Guide](#mcp-server-tooling-guide) section below for complete documentation and advanced usage patterns.
 
+## 🎯 Serena vs RepoPrompt: Decision Guide
+
+**You are working on a macOS app in a large Swift/SwiftUI/AppKit codebase.**
+
+You have TWO high-level MCP servers available for code work:
+
+1) **Serena** (server name: "serena")
+2) **RepoPrompt** (server name: "RepoPrompt")
+
+**They are NOT interchangeable. Follow these rules carefully.**
+
+### High-Level Roles
+
+**SERENA ("serena"):**
+- A coding agent/IDE brain that talks to language servers (LSP) for symbolic code operations.
+- It understands code via symbols, types, methods, references, and structure, not just raw text.
+- Use Serena when you need IDE-like navigation and precise edits inside the codebase.
+
+**REPOPROMPT ("RepoPrompt"):**
+- A macOS app + MCP server that manages code *context* and *workflows*.
+- It converts selected files into structured prompts, runs planning/edit sessions, and applies model-generated edits as reviewable diffs.
+- Use RepoPrompt to assemble the right files, define the task, and drive plan→edit workflows.
+
+**Summary:** Serena = semantic code / LSP / symbol-level IDE agent. RepoPrompt = context selection + planning + safe edits.
+
+### When to Use SERENA
+
+**ALWAYS PREFER SERENA when the task is about:**
+
+- **Symbol-level understanding or edits:**
+  - Finding a type, function, method, protocol, or extension.
+  - Finding all references to a symbol (e.g. a method or property).
+  - Understanding call graphs and relationships between components.
+
+- **Large or complex refactors:**
+  - Changing APIs and updating all call sites.
+  - Reorganizing modules or shared abstractions.
+  - Making consistent edits across many references of a symbol.
+
+- **Precise, local changes inside known code:**
+  - Editing a specific method in a specific type.
+  - Inserting/removing code near a symbol.
+  - Adjusting logic tightly scoped to a particular Swift, SwiftUI or AppKit construct.
+
+**Think:** "I need IDE-like navigation, references, or structural edits." → **Use Serena tools.**
+
+**Examples of tasks where Serena is PRIMARY:**
+- "Find all places where `DocumentController` calls `save()` and update them to the new async API."
+- "Rename this Swift protocol and update all conformances and references."
+- "Insert a new initializer after the existing one in `MainWindowViewModel`."
+- "Explore where a Combine publisher is subscribed and how it flows through the app."
+
+### When to Use REPOPROMPT
+
+**ALWAYS PREFER REPOPROMPT when the task is about:**
+
+- **Managing and curating context:**
+  - Listing and selecting which files belong to a feature or bugfix.
+  - Searching the repo broadly and then building a working set of files.
+
+- **Planning and orchestrating multi-step work:**
+  - Writing or adjusting a high-level task description.
+  - Generating a plan for a complex change (architecture changes, new features).
+  - Iterating in multiple plan→edit cycles.
+
+- **Safely applying larger or cross-cutting textual changes:**
+  - Using RepoPrompt's reviewable diffs.
+  - Coordinating multi-file edits where a single "session" should manage all changes.
+
+**Think:** "I need to pick files, define the task, plan the work, then apply edits with diffs." → **Use RepoPrompt tools.**
+
+**Examples of tasks where RepoPrompt is PRIMARY:**
+- "Add a new Preferences pane for keyboard shortcuts. Identify all relevant files, propose an architecture, then implement it in a few steps."
+- "Investigate a deadlock when closing windows during sync: gather all relevant types, logs, and flow, then propose and implement a fix."
+- "Apply a new logging pattern across a specific group of files, with a single reviewable diff."
+
+### How to Combine Them (Recommended Order)
+
+**Default COMBO pattern for non-trivial tasks:**
+
+1. **RepoPrompt first (context + plan).**
+   - Use RepoPrompt to:
+     - Inspect the file tree and search the repo.
+     - Build a focused selection of relevant files.
+     - Establish a clear task description and overall plan.
+
+2. **Serena for symbol-level navigation and edits.**
+   - Once you know the key types, methods, and modules:
+     - Use Serena to jump to symbols quickly.
+     - Use Serena to find references and make precise edits.
+     - Prefer Serena for delicate refactors and structural changes.
+
+3. **RepoPrompt again to finalize.**
+   - For large or multi-file changes:
+     - Use RepoPrompt's edit/diff mechanisms to apply and review the final patch.
+     - Ensure the change set is coherent and reviewable as a unit.
+
+**Guideline:**
+- If the problem is "What and where should we change?" → START WITH **RepoPrompt**.
+- If the problem is "Exactly how do we adjust these symbols?" → USE **Serena**.
+
+### Conflict Resolution Rules
+
+**If you are unsure which server to use:**
+
+1. If the task explicitly mentions:
+   - **REFACTOR, RENAME, FIND REFERENCES, UPDATE ALL CALL SITES,** or anything symbol-heavy
+   → Prefer **Serena**.
+
+2. If the task explicitly mentions:
+   - **PLAN, SELECT FILES, CONTEXT, LARGE EDIT, DIFF,** or multi-step feature work
+   → Prefer **RepoPrompt**.
+
+3. For big tasks that involve both planning and precise edits:
+   - Start with **RepoPrompt** for planning and file selection.
+   - Then use **Serena** for navigation and fine-grained code changes.
+   - Return to **RepoPrompt** for multi-file diffs if needed.
+
+**Do NOT use both tools blindly for the same subtask.** For each step:
+- Choose EITHER Serena OR RepoPrompt based on the rules above.
+- Explain briefly (in thoughts/instructions, not to the user) why that choice fits.
+
+### Safety & Scope
+
+- Never perform large, sweeping edits with Serena alone without a clear plan or review step.
+- Whenever a change might impact many files or core architecture, prefer to:
+  - Plan and manage context with **RepoPrompt**.
+  - Execute symbol-level modifications with **Serena**.
+  - Use diffs and tests to validate the final state.
+
 ## Apple Platform Standards
 
 **CRITICAL:** All code, design, and implementation must strictly align with:
