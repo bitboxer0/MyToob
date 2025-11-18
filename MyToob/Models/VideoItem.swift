@@ -34,7 +34,7 @@ final class VideoItem {
     var isLocal: Bool
 
     /// AI-generated topic tags for organization (stored as Data)
-    @Attribute(.externalStorage) private var aiTopicTagsData: Data
+    @Attribute(.externalStorage) private var aiTopicTagsData: Data = Data()
 
     /// Computed property for accessing tags as String array
     var aiTopicTags: [String] {
@@ -48,7 +48,7 @@ final class VideoItem {
 
     /// 384-dimensional embedding vector for semantic search (stored as Data)
     /// Nil until AI processing is complete
-    @Attribute(.externalStorage) private var embeddingData: Data?
+    @Attribute(.externalStorage) private var embeddingData: Data? = nil
 
     /// Computed property for accessing embedding as Float array
     var embedding: [Float]? {
@@ -74,6 +74,10 @@ final class VideoItem {
     /// Relationship to user notes
     @Relationship(deleteRule: .cascade, inverse: \Note.videoItem)
     var notes: [Note]?
+
+    /// Security-scoped bookmark data for persistent file access (local files only)
+    /// Allows sandboxed app to access user-selected files across launches
+    @Attribute(.externalStorage) var bookmarkData: Data?
 
     /// Designated initializer for YouTube videos
     init(
@@ -102,6 +106,7 @@ final class VideoItem {
         }
         self.addedAt = addedAt
         self.lastWatchedAt = lastWatchedAt
+        self.bookmarkData = nil // YouTube videos don't need bookmarks
     }
 
     /// Designated initializer for local video files
@@ -113,7 +118,8 @@ final class VideoItem {
         aiTopicTags: [String] = [],
         embedding: [Float]? = nil,
         addedAt: Date = Date(),
-        lastWatchedAt: Date? = nil
+        lastWatchedAt: Date? = nil,
+        bookmarkData: Data? = nil
     ) {
         self.videoID = nil
         self.localURL = localURL
@@ -130,6 +136,7 @@ final class VideoItem {
         }
         self.addedAt = addedAt
         self.lastWatchedAt = lastWatchedAt
+        self.bookmarkData = bookmarkData
     }
 
     /// Computed property for unique identifier (videoID for YouTube, localURL path for local)
