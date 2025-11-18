@@ -13,6 +13,68 @@ MyToob is a native macOS video client that organizes and discovers YouTube video
 - Full computer vision/ASR allowed only for local files
 - Two distributions: App Store SKU (strict compliance) and notarized DMG (power-user features)
 
+## Apple Platform Standards
+
+**CRITICAL:** All code, design, and implementation must strictly align with:
+- [Apple Human Interface Guidelines (HIG)](https://developer.apple.com/design/human-interface-guidelines)
+- [App Store Review Guidelines](https://developer.apple.com/app-store/guidelines/)
+- [macOS Design Themes](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos)
+
+### Human Interface Guidelines Requirements
+
+**UI Patterns & Controls:**
+- Use native macOS UI patterns (NSToolbar-style toolbars, NSSplitView layouts, native context menus)
+- Follow macOS keyboard shortcuts and menu conventions (⌘K for search, ⌘W to close, standard Edit menu)
+- Use SF Symbols for icons where appropriate (system-provided icons preferred over custom)
+- Implement proper window management (state restoration, full-screen support, split view)
+- Support macOS-native drag & drop behaviors
+
+**System Integration:**
+- Respect system preferences automatically:
+  - Dark Mode and Light Mode support
+  - System accent colors
+  - Reduced motion accessibility setting
+  - Increase contrast accessibility setting
+  - Dynamic Type (text sizing)
+- Leverage system frameworks (SwiftUI, AppKit where needed) rather than custom reimplementations
+- Platform integration where applicable (Spotlight, Handoff, Continuity Camera)
+
+**Accessibility (Built-in from Day One):**
+- VoiceOver compatibility for all UI elements
+- Full keyboard navigation support (100% feature coverage without mouse)
+- Proper accessibility labels and hints
+- Support for VoiceOver rotor custom actions
+- Respects system accessibility preferences
+
+### App Store Guidelines Requirements
+
+**Critical Compliance Points:**
+- **Section 4.2 Minimum Functionality:** App must provide substantial, sustained value beyond simple web wrapper
+- **Section 5.1.1 Data Collection:** Privacy labels must be accurate, user consent required for data collection
+- **Section 5.2.3 User-Generated Content (UGC):** Must include reporting mechanism, moderation tools, blocking features
+- **YouTube ToS:** No stream downloading, no ad blocking, use approved YouTube IFrame Player API only
+- **Sandbox Entitlements:** Minimal and justified (network, user-selected files, keychain only)
+
+### Design Philosophy for This Project
+
+**Native macOS First:**
+- Native macOS look and feel over cross-platform abstractions
+- SwiftUI-native components unless AppKit interop required (AVKit, WKWebView)
+- Follow Apple's design language, not generic Material Design or custom UI
+
+**Before Implementing ANY UI Component:**
+1. Consult the HIG for the appropriate macOS pattern
+2. Use system-provided controls when available
+3. Only create custom UI when system controls cannot fulfill the requirement
+4. Ensure accessibility is built-in, not bolted-on
+
+**Reference the HIG Regularly:**
+- [macOS Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos)
+- [SwiftUI Views](https://developer.apple.com/design/human-interface-guidelines/swiftui-views)
+- [macOS App Architecture](https://developer.apple.com/design/human-interface-guidelines/macos-app-architecture)
+- [Color and Effects](https://developer.apple.com/design/human-interface-guidelines/color)
+- [Typography](https://developer.apple.com/design/human-interface-guidelines/typography)
+
 ## Build & Development Commands
 
 > **📘 Complete Xcode Setup:** See [docs/XCODE_SETUP.md](docs/XCODE_SETUP.md) for comprehensive Xcode configuration, entitlements, signing, and troubleshooting.

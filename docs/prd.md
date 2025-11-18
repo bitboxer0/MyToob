@@ -410,6 +410,30 @@ MyToob/
 - **Networking:** URLSession with async/await, Combine for reactive streams where needed
 - **AI/ML:** Core ML exclusively (no TensorFlow, PyTorch, or external inference engines)
 
+**Apple Ecosystem Compliance:**
+- **CRITICAL:** All code, design, and implementation must strictly adhere to:
+  - [Apple Human Interface Guidelines (HIG)](https://developer.apple.com/design/human-interface-guidelines) - mandatory for all UI/UX decisions
+  - [App Store Review Guidelines](https://developer.apple.com/app-store/guidelines/) - compliance required for App Store submission
+  - [macOS Design Themes](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos) - platform-specific patterns
+- **Human Interface Guidelines Requirements:**
+  - Use native macOS UI patterns and controls (NSToolbar-style toolbars, NSSplitView layouts, native context menus)
+  - Follow macOS keyboard shortcuts and menu bar conventions (⌘K for search, ⌘W to close, standard Edit menu)
+  - Respect system preferences (Dark Mode, accent colors, reduced motion, increase contrast)
+  - Use SF Symbols for icons where appropriate (system-provided icons preferred over custom)
+  - Implement proper window management (state restoration, full-screen support, split view)
+  - Support macOS-native drag & drop behaviors
+- **App Store Guidelines Requirements:**
+  - Section 4.2 Minimum Functionality: App must provide substantial, sustained value
+  - Section 5.1.1 Data Collection: Privacy labels accurate, user consent for data collection
+  - Section 5.2.3 User-Generated Content (UGC): Reporting mechanism, moderation tools, blocking features
+  - YouTube ToS compliance: No stream downloading, no ad blocking, use approved YouTube IFrame Player API
+  - Sandbox entitlements minimal and justified (network, user-selected files, keychain only)
+- **Design Philosophy:**
+  - Native macOS look and feel over cross-platform abstractions
+  - Leverage system frameworks (SwiftUI, AppKit where needed) rather than custom reimplementations
+  - Accessibility baked in from day one (VoiceOver, keyboard navigation, Dynamic Type)
+  - Platform integration (Spotlight, Handoff, Continuity Camera if applicable)
+
 **Third-Party Dependencies:**
 - **Minimize external dependencies** to reduce supply chain risk and App Store review complexity
 - **Acceptable exceptions:**
