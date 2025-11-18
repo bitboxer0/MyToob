@@ -33,12 +33,37 @@ final class VideoItem {
     /// Whether this is a local file (true) or YouTube video (false)
     var isLocal: Bool
 
-    /// AI-generated topic tags for organization
-    @Attribute(.transformable) var aiTopicTags: [String]
+    /// AI-generated topic tags for organization (stored as Data)
+    @Attribute(.externalStorage) private var aiTopicTagsData: Data
 
-    /// 384-dimensional embedding vector for semantic search
+    /// Computed property for accessing tags as String array
+    var aiTopicTags: [String] {
+        get {
+            (try? JSONDecoder().decode([String].self, from: aiTopicTagsData)) ?? []
+        }
+        set {
+            aiTopicTagsData = (try? JSONEncoder().encode(newValue)) ?? Data()
+        }
+    }
+
+    /// 384-dimensional embedding vector for semantic search (stored as Data)
     /// Nil until AI processing is complete
-    @Attribute(.transformable) var embedding: [Float]?
+    @Attribute(.externalStorage) private var embeddingData: Data?
+
+    /// Computed property for accessing embedding as Float array
+    var embedding: [Float]? {
+        get {
+            guard let data = embeddingData else { return nil }
+            return try? JSONDecoder().decode([Float].self, from: data)
+        }
+        set {
+            if let value = newValue {
+                embeddingData = try? JSONEncoder().encode(value)
+            } else {
+                embeddingData = nil
+            }
+        }
+    }
 
     /// When this item was added to the library
     var addedAt: Date
@@ -69,8 +94,12 @@ final class VideoItem {
         self.duration = duration
         self.watchProgress = watchProgress
         self.isLocal = false
-        self.aiTopicTags = aiTopicTags
-        self.embedding = embedding
+        self.aiTopicTagsData = (try? JSONEncoder().encode(aiTopicTags)) ?? Data()
+        if let embedding = embedding {
+            self.embeddingData = try? JSONEncoder().encode(embedding)
+        } else {
+            self.embeddingData = nil
+        }
         self.addedAt = addedAt
         self.lastWatchedAt = lastWatchedAt
     }
@@ -93,8 +122,12 @@ final class VideoItem {
         self.duration = duration
         self.watchProgress = watchProgress
         self.isLocal = true
-        self.aiTopicTags = aiTopicTags
-        self.embedding = embedding
+        self.aiTopicTagsData = (try? JSONEncoder().encode(aiTopicTags)) ?? Data()
+        if let embedding = embedding {
+            self.embeddingData = try? JSONEncoder().encode(embedding)
+        } else {
+            self.embeddingData = nil
+        }
         self.addedAt = addedAt
         self.lastWatchedAt = lastWatchedAt
     }

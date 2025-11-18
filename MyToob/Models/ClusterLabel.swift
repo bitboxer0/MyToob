@@ -20,7 +20,18 @@ final class ClusterLabel {
     var label: String
 
     /// 384-dimensional centroid vector representing the cluster's semantic center
-    @Attribute(.transformable) var centroid: [Float]
+    /// Stored as Data for SwiftData compatibility
+    @Attribute(.externalStorage) private var centroidData: Data
+
+    /// Computed property for accessing centroid as Float array
+    var centroid: [Float] {
+        get {
+            (try? JSONDecoder().decode([Float].self, from: centroidData)) ?? []
+        }
+        set {
+            centroidData = (try? JSONEncoder().encode(newValue)) ?? Data()
+        }
+    }
 
     /// Number of items in this cluster
     var itemCount: Int
@@ -42,7 +53,7 @@ final class ClusterLabel {
     ) {
         self.clusterID = clusterID
         self.label = label
-        self.centroid = centroid
+        self.centroidData = (try? JSONEncoder().encode(centroid)) ?? Data()
         self.itemCount = itemCount
         self.updatedAt = updatedAt
         self.confidenceScore = confidenceScore
