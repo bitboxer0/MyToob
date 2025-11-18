@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:culturedcode.com)",
+      "WebFetch(domain:obsidian.md)",
+      "WebFetch(domain:reflect.app)",
+      "Bash(md-tree explode:*)",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "mcp__serena__get_current_config",
+      "mcp__serena__list_dir",
+      "Bash(xcodebuild:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "context7-mcp",
+    "memory-mcp",
+    "sequential-thinking",
+    "code-search",
+    "filesystem",
+    "git",
+    "apple-docs-mcp",
+    "xcodemcp",
+    "RepoPrompt",
+    "octocode-mcp",
+    "serena",
+    "linear"
+  ]
+}
