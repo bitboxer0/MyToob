@@ -2,8 +2,7 @@
 //  MyToobApp.swift
 //  MyToob
 //
-//  Created by Daniel Finley on 11/17/25.
-//  Updated by Claude Code (BMad Master) - Story 1.4: SwiftData Core Models
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import OSLog
@@ -16,8 +15,10 @@ struct MyToobApp: App {
     // Log app launch with version info
     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
     let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
-    LoggingService.shared.app.info("MyToob launched - Version: \(appVersion, privacy: .public) (\(buildNumber, privacy: .public))")
+    LoggingService.shared.app.info(
+      "MyToob launched - Version: \(appVersion, privacy: .public) (\(buildNumber, privacy: .public))")
   }
+
   var sharedModelContainer: ModelContainer = {
     let schema = Schema([
       VideoItem.self,
@@ -32,7 +33,8 @@ struct MyToobApp: App {
       LoggingService.shared.app.info("ModelContainer initialized successfully")
       return container
     } catch {
-      LoggingService.shared.app.fault("Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
+      LoggingService.shared.app.fault(
+        "Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
       fatalError("Could not create ModelContainer: \(error)")
     }
   }()

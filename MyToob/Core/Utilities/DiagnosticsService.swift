@@ -2,8 +2,7 @@
 //  DiagnosticsService.swift
 //  MyToob
 //
-//  Service for collecting and exporting diagnostic information.
-//  Includes logs, system info, and app statistics with privacy sanitization.
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import AppKit
@@ -16,11 +15,11 @@ import System
 final class DiagnosticsService {
   /// Shared singleton instance
   static let shared = DiagnosticsService()
-  
+
   private init() {}
-  
+
   // MARK: - Diagnostic Report
-  
+
   /// Diagnostic report structure
   struct DiagnosticReport: Codable {
     let timestamp: Date
@@ -28,27 +27,27 @@ final class DiagnosticsService {
     let systemInfo: SystemInfo
     let modelContainerStats: ModelContainerStats?
     let recentLogs: [LogEntry]
-    
+
     struct AppInfo: Codable {
       let version: String
       let buildNumber: String
       let bundleIdentifier: String
     }
-    
+
     struct SystemInfo: Codable {
       let osVersion: String
       let deviceModel: String
       let processorCount: Int
       let memorySize: UInt64
     }
-    
+
     struct ModelContainerStats: Codable {
       let videoItemCount: Int
       let clusterLabelCount: Int
       let noteCount: Int
       let channelBlacklistCount: Int
     }
-    
+
     struct LogEntry: Codable {
       let timestamp: Date
       let level: String
@@ -56,9 +55,9 @@ final class DiagnosticsService {
       let message: String
     }
   }
-  
+
   // MARK: - Export Diagnostics
-  
+
   /// Export diagnostics to a .zip file
   /// - Parameters:
   ///   - modelContext: Optional ModelContext for collecting statistics
@@ -70,12 +69,12 @@ final class DiagnosticsService {
   ) async throws -> URL {
     // Collect diagnostic data
     let report = try await collectDiagnostics(modelContext: modelContext, hours: hours)
-    
+
     // Create temporary directory for diagnostic files
     let tempDir = FileManager.default.temporaryDirectory
       .appendingPathComponent("MyToob-Diagnostics-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    
+
     // Write diagnostic report as JSON
     let reportURL = tempDir.appendingPathComponent("diagnostic-report.json")
     let encoder = JSONEncoder()
@@ -83,51 +82,51 @@ final class DiagnosticsService {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let reportData = try encoder.encode(report)
     try reportData.write(to: reportURL)
-    
+
     // Write logs as text file (more readable)
     let logsURL = tempDir.appendingPathComponent("logs.txt")
     let logsText = formatLogsAsText(report.recentLogs)
     try logsText.write(to: logsURL, atomically: true, encoding: .utf8)
-    
+
     // Create README
     let readmeURL = tempDir.appendingPathComponent("README.txt")
     let readme = """
       MyToob Diagnostic Report
       Generated: \(ISO8601DateFormatter().string(from: report.timestamp))
-      
+
       Contents:
       - diagnostic-report.json: Complete diagnostic data in JSON format
       - logs.txt: Recent application logs (last \(hours) hours)
-      
+
       App Information:
       - Version: \(report.appInfo.version) (\(report.appInfo.buildNumber))
       - Bundle ID: \(report.appInfo.bundleIdentifier)
-      
+
       System Information:
       - macOS: \(report.systemInfo.osVersion)
       - Device: \(report.systemInfo.deviceModel)
-      
+
       Privacy Notice:
       This diagnostic report has been sanitized to remove sensitive information
       such as API keys, tokens, and user file paths. Video IDs and titles may
       be included for debugging purposes.
-      
+
       """
     try readme.write(to: readmeURL, atomically: true, encoding: .utf8)
-    
+
     // Create .zip file
     let zipURL = tempDir.deletingLastPathComponent()
       .appendingPathComponent("MyToob-Diagnostics-\(formatDateForFilename(report.timestamp)).zip")
     try await createZipArchive(from: tempDir, to: zipURL)
-    
+
     // Clean up temporary directory
     try? FileManager.default.removeItem(at: tempDir)
-    
+
     return zipURL
   }
-  
+
   // MARK: - Private Methods
-  
+
   private func collectDiagnostics(
     modelContext: ModelContext?,
     hours: Int
@@ -136,7 +135,7 @@ final class DiagnosticsService {
     let systemInfo = collectSystemInfo()
     let modelStats = modelContext.map { collectModelContainerStats(from: $0) }
     let logs = try await collectRecentLogs(hours: hours)
-    
+
     return DiagnosticReport(
       timestamp: Date(),
       appInfo: appInfo,
@@ -145,7 +144,7 @@ final class DiagnosticsService {
       recentLogs: logs
     )
   }
-  
+
   private func collectAppInfo() -> DiagnosticReport.AppInfo {
     let bundle = Bundle.main
     return DiagnosticReport.AppInfo(
@@ -154,7 +153,7 @@ final class DiagnosticsService {
       bundleIdentifier: bundle.bundleIdentifier ?? "Unknown"
     )
   }
-  
+
   private func collectSystemInfo() -> DiagnosticReport.SystemInfo {
     let processInfo = ProcessInfo.processInfo
     return DiagnosticReport.SystemInfo(
@@ -164,14 +163,14 @@ final class DiagnosticsService {
       memorySize: processInfo.physicalMemory
     )
   }
-  
+
   private func collectModelContainerStats(from context: ModelContext) -> DiagnosticReport.ModelContainerStats {
     // Count each model type
     let videoItemCount = (try? context.fetch(FetchDescriptor<VideoItem>()).count) ?? 0
     let clusterLabelCount = (try? context.fetch(FetchDescriptor<ClusterLabel>()).count) ?? 0
     let noteCount = (try? context.fetch(FetchDescriptor<Note>()).count) ?? 0
     let channelBlacklistCount = (try? context.fetch(FetchDescriptor<ChannelBlacklist>()).count) ?? 0
-    
+
     return DiagnosticReport.ModelContainerStats(
       videoItemCount: videoItemCount,
       clusterLabelCount: clusterLabelCount,
@@ -179,26 +178,26 @@ final class DiagnosticsService {
       channelBlacklistCount: channelBlacklistCount
     )
   }
-  
+
   private func collectRecentLogs(hours: Int) async throws -> [DiagnosticReport.LogEntry] {
     let store = try OSLogStore(scope: .currentProcessIdentifier)
     let timeInterval = TimeInterval(-hours * 3600)
     let startDate = Date(timeIntervalSinceNow: timeInterval)
-    
+
     let position = store.position(date: startDate)
     let entries = try store.getEntries(at: position)
-    
+
     var logEntries: [DiagnosticReport.LogEntry] = []
-    
+
     for entry in entries {
       // Only process log entries (not signposts, activities, etc.)
       guard let logEntry = entry as? OSLogEntryLog else { continue }
-      
+
       // Only include logs from our subsystem
       guard logEntry.subsystem == "com.yourcompany.mytoob" else { continue }
-      
+
       let sanitizedMessage = sanitizeMessage(logEntry.composedMessage)
-      
+
       logEntries.append(
         DiagnosticReport.LogEntry(
           timestamp: logEntry.date,
@@ -208,41 +207,41 @@ final class DiagnosticsService {
         )
       )
     }
-    
+
     return logEntries
   }
-  
+
   // MARK: - Sanitization
-  
+
   private func sanitizeMessage(_ message: String) -> String {
     var sanitized = message
-    
+
     // Redact common token patterns
     sanitized = sanitized.replacingOccurrences(
       of: "token[:\\s]+[A-Za-z0-9_-]+",
       with: "token: [REDACTED]",
       options: .regularExpression
     )
-    
+
     // Redact API keys
     sanitized = sanitized.replacingOccurrences(
       of: "key[:\\s]+[A-Za-z0-9_-]+",
       with: "key: [REDACTED]",
       options: .regularExpression
     )
-    
+
     // Redact file paths containing username
     sanitized = sanitized.replacingOccurrences(
       of: "/Users/[^/]+/",
       with: "/Users/[USER]/",
       options: .regularExpression
     )
-    
+
     return sanitized
   }
-  
+
   // MARK: - Utility Methods
-  
+
   private func getDeviceModel() -> String {
     var size = 0
     sysctlbyname("hw.model", nil, &size, nil, 0)
@@ -250,7 +249,7 @@ final class DiagnosticsService {
     sysctlbyname("hw.model", &machine, &size, nil, 0)
     return String(cString: machine)
   }
-  
+
   private func levelString(from level: OSLogEntryLog.Level) -> String {
     switch level {
     case .debug: return "DEBUG"
@@ -261,25 +260,26 @@ final class DiagnosticsService {
     default: return "UNKNOWN"
     }
   }
-  
+
   private func formatLogsAsText(_ logs: [DiagnosticReport.LogEntry]) -> String {
     let formatter = ISO8601DateFormatter()
     return logs.map { entry in
       "[\(formatter.string(from: entry.timestamp))] [\(entry.level)] [\(entry.category)] \(entry.message)"
-    }.joined(separator: "\n")
+    }
+    .joined(separator: "\n")
   }
-  
+
   private func formatDateForFilename(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd-HHmmss"
     return formatter.string(from: date)
   }
-  
+
   private func createZipArchive(from sourceURL: URL, to destinationURL: URL) async throws {
     // Use NSFileCoordinator and NSFileWrapper for safe file operations
     let coordinator = NSFileCoordinator()
     var error: NSError?
-    
+
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       coordinator.coordinate(
         readingItemAt: sourceURL,
@@ -294,7 +294,7 @@ final class DiagnosticsService {
           continuation.resume(throwing: error)
         }
       }
-      
+
       if let error = error {
         continuation.resume(throwing: error)
       }

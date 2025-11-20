@@ -2,8 +2,7 @@
 //  LocalFileImportService.swift
 //  MyToob
 //
-//  Service for importing local video files via NSOpenPanel
-//  Handles security-scoped bookmarks for sandbox compliance
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import AppKit

@@ -1,8 +1,8 @@
 //
 //  ChannelBlacklistTests.swift
-//  MyToobTests
+//  MyToob
 //
-//  Created by Claude Code (BMad Master) - Story 1.4
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import Foundation

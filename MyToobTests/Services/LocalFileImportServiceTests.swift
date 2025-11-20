@@ -1,8 +1,8 @@
 //
 //  LocalFileImportServiceTests.swift
-//  MyToobTests
+//  MyToob
 //
-//  Tests for LocalFileImportService
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import AVFoundation
@@ -204,10 +204,13 @@ final class LocalFileImportServiceTests: XCTestCase {
 
     // Verify the file was created successfully
     guard writer.status == .completed else {
-      throw NSError(domain: "TestError", code: 3, userInfo: [
-        NSLocalizedDescriptionKey: "Writer failed with status: \(writer.status.rawValue)",
-        NSUnderlyingErrorKey: writer.error as Any,
-      ])
+      throw NSError(
+        domain: "TestError",
+        code: 3,
+        userInfo: [
+          NSLocalizedDescriptionKey: "Writer failed with status: \(writer.status.rawValue)",
+          NSUnderlyingErrorKey: writer.error as Any,
+        ])
     }
 
     return videoURL

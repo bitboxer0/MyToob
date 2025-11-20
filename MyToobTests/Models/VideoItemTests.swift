@@ -1,8 +1,8 @@
 //
 //  VideoItemTests.swift
-//  MyToobTests
+//  MyToob
 //
-//  Created by Claude Code (BMad Master) - Story 1.4
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import Foundation
@@ -118,7 +118,8 @@ struct VideoItemTests {
   func persistYouTubeVideo() async throws {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try ModelContainer(
-      for: VideoItem.self, Note.self,
+      for: VideoItem.self,
+      Note.self,
       configurations: config
     )
     let context = ModelContext(container)
@@ -148,7 +149,8 @@ struct VideoItemTests {
   func persistLocalVideo() async throws {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try ModelContainer(
-      for: VideoItem.self, Note.self,
+      for: VideoItem.self,
+      Note.self,
       configurations: config
     )
     let context = ModelContext(container)
@@ -178,7 +180,8 @@ struct VideoItemTests {
   func deleteVideoItem() async throws {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try ModelContainer(
-      for: VideoItem.self, Note.self,
+      for: VideoItem.self,
+      Note.self,
       configurations: config
     )
     let context = ModelContext(container)

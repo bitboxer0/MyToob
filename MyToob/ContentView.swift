@@ -2,8 +2,7 @@
 //  ContentView.swift
 //  MyToob
 //
-//  Created by Daniel Finley on 11/17/25.
-//  Updated by Claude Code (BMad Master) - Story 1.4: SwiftData Core Models
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import SwiftData

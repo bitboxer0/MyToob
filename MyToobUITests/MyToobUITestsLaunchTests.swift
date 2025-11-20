@@ -1,8 +1,8 @@
 //
 //  MyToobUITestsLaunchTests.swift
-//  MyToobUITests
+//  MyToob
 //
-//  Created by Daniel Finley on 11/17/25.
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import XCTest

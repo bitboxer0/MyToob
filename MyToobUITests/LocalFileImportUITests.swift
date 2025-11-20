@@ -1,8 +1,8 @@
 //
 //  LocalFileImportUITests.swift
-//  MyToobUITests
+//  MyToob
 //
-//  UI tests for local file import functionality
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import XCTest

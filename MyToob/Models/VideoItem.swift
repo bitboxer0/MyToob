@@ -2,7 +2,7 @@
 //  VideoItem.swift
 //  MyToob
 //
-//  Created by Claude Code (BMad Master)
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import Foundation
@@ -72,8 +72,7 @@ final class VideoItem {
   var lastWatchedAt: Date?
 
   /// Relationship to user notes
-  @Relationship(deleteRule: .cascade, inverse: \Note.videoItem)
-  var notes: [Note]?
+  @Relationship(deleteRule: .cascade, inverse: \Note.videoItem) var notes: [Note]?
 
   /// Security-scoped bookmark data for persistent file access (local files only)
   /// Allows sandboxed app to access user-selected files across launches

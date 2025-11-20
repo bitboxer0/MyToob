@@ -1,8 +1,8 @@
 //
 //  MyToobTests.swift
-//  MyToobTests
+//  MyToob
 //
-//  Created by Daniel Finley on 11/17/25.
+//  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
 import Testing
@@ -10,7 +10,8 @@ import Testing
 @testable import MyToob
 
 struct MyToobTests {
-  @Test func example() async throws {
+  @Test
+  func example() async throws {
     // Write your test here and use APIs like `#expect(...)` to check expected conditions.
   }
 }
