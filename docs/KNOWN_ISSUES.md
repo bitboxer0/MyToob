@@ -112,7 +112,19 @@ All 4 test failures have been successfully resolved:
 - `MyToob/Models/VideoItem.swift` - Added notes array initialization
 - `MyToobTests/Services/LocalFileImportServiceTests.swift` - Fixed async issues and test assertions
 
-**Test Status:** All previously failing tests now pass locally
+**Test Status:** Tests pass locally but show intermittent failures in CI
+
+**CI Status:** GitHub Actions run 19539678529 (2025-11-20) shows test failures despite fixes:
+- testExtractMetadataFromValidVideo() - Likely timing issue with AVAsset metadata loading
+- cascadeDelete() - Passes locally, intermittent in CI (possible race condition)
+- testResolveSecurityScopedBookmark() - Passes locally, intermittent in CI
+
+**Root Cause:** Test flakiness due to:
+1. AVAsset async metadata loading in minimal test files
+2. Timing differences between local and CI environments
+3. Potential race conditions in SwiftData relationship initialization
+
+**Recommendation:** Create follow-up story for test stability improvements
 
 ---
 
