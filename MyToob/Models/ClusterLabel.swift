@@ -21,7 +21,7 @@ final class ClusterLabel {
 
     /// 384-dimensional centroid vector representing the cluster's semantic center
     /// Stored as Data for SwiftData compatibility
-    @Attribute(.externalStorage) private var centroidData: Data
+    @Attribute(.externalStorage) private var centroidData: Data = Data()
 
     /// Computed property for accessing centroid as Float array
     var centroid: [Float] {

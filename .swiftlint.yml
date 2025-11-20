@@ -1,0 +1,271 @@
+# SwiftLint Configuration for MyToob
+# Enforces code quality, security, and compliance requirements
+
+# Paths to include/exclude
+included:
+  - MyToob
+  - MyToobTests
+  - MyToobUITests
+
+excluded:
+  - Pods
+  - MyToob.xcodeproj
+  - MyToobTests/Generated
+  - .build
+  - .swiftpm
+  - docs
+
+# Analyzer rules (require full compilation)
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+# Opt-in rules (not enabled by default)
+opt_in_rules:
+  - array_init
+  - attributes
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
+  - discouraged_object_literal
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - enum_case_associated_values_count
+  - explicit_init
+  - explicit_self
+  - extension_access_modifier
+  - fallthrough
+  - fatal_error_message
+  - file_header
+  - first_where
+  - flatmap_over_map_reduce
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - indentation_width
+  - joined_default_parameter
+  - last_where
+  - legacy_random
+  - let_var_whitespace
+  - literal_expression_end_indentation
+  - lower_acl_than_parent
+  - modifier_order
+  - multiline_arguments
+  - multiline_function_chains
+  - multiline_literal_brackets
+  - multiline_parameters
+  - multiline_parameters_brackets
+  - operator_usage_whitespace
+  - overridden_super_call
+  - override_in_extension
+  - pattern_matching_keywords
+  - prefer_self_type_over_type_of_self
+  - prefer_zero_over_explicit_init
+  - private_action
+  - private_outlet
+  - prohibited_interface_builder
+  - prohibited_super_call
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - single_test_class
+  - sorted_first_last
+  - sorted_imports
+  - static_operator
+  - strong_iboutlet
+  - toggle_bool
+  - trailing_closure
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+  - unowned_variable_capture
+  - vertical_parameter_alignment_on_call
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - yoda_condition
+
+# Disabled rules
+disabled_rules:
+  - todo # We allow TODOs in development
+  - type_body_length # AI-generated code can be verbose
+  - file_length # Allow longer files for complex features
+
+# Custom rules for compliance and security
+custom_rules:
+  # CRITICAL: YouTube ToS compliance - block googlevideo.com usage
+  no_googlevideo_urls:
+    name: "No googlevideo.com URLs"
+    regex: "(?i)googlevideo\\.com"
+    match_kinds:
+      - string
+    message: "CRITICAL: Direct access to googlevideo.com violates YouTube ToS. Use IFrame Player API only."
+    severity: error
+  
+  # CRITICAL: Security - detect hardcoded API keys
+  no_hardcoded_api_keys:
+    name: "No Hardcoded API Keys"
+    regex: "(?i)(api[_-]?key|apikey)\\s*=\\s*[\"'][a-zA-Z0-9]{20,}[\"']"
+    match_kinds:
+      - string
+    message: "CRITICAL: Hardcoded API key detected. Use environment variables or secure configuration."
+    severity: error
+  
+  # CRITICAL: Security - detect hardcoded secrets/tokens
+  no_hardcoded_secrets:
+    name: "No Hardcoded Secrets"
+    regex: "(?i)(secret|token|password|credential)\\s*=\\s*[\"'][a-zA-Z0-9]{16,}[\"']"
+    match_kinds:
+      - string
+    message: "WARNING: Potential hardcoded secret detected. Use Keychain or environment variables."
+    severity: warning
+  
+  # Compliance: Block stream/download keywords in YouTube context
+  no_youtube_stream_download:
+    name: "No YouTube Stream/Download"
+    regex: "(?i)(download.*youtube|stream.*youtube|cache.*youtube.*video)"
+    message: "WARNING: YouTube stream downloading/caching violates ToS. Use IFrame Player only."
+    severity: warning
+  
+  # Coding standard: Never use try! except in tests
+  no_force_try_outside_tests:
+    name: "No Force Try Outside Tests"
+    regex: "try!"
+    match_kinds:
+      - identifier
+    excluded: ".*Tests\\.swift"
+    message: "Never use try! except in unit tests. Use proper do-catch error handling."
+    severity: error
+  
+  # Coding standard: Never call SecItemAdd directly
+  no_direct_keychain_access:
+    name: "Use KeychainService Wrapper"
+    regex: "SecItem(Add|Update|Delete|CopyMatching)"
+    message: "Never call SecItem* directly. Use KeychainService wrapper for Keychain access."
+    severity: error
+  
+  # Coding standard: Never use ProcessInfo.processInfo.environment directly
+  no_direct_environment_access:
+    name: "Use Configuration Enum"
+    regex: "ProcessInfo\\.processInfo\\.environment"
+    excluded: "Configuration\\.swift"
+    message: "Never access ProcessInfo.processInfo.environment directly. Use Configuration enum."
+    severity: error
+  
+  # Coding standard: Never make direct URLSession calls for YouTube API
+  no_direct_youtube_urlsession:
+    name: "Use YouTubeService Wrapper"
+    regex: "URLSession.*youtube\\.googleapis\\.com"
+    excluded: "YouTubeService\\.swift"
+    message: "Never make direct URLSession calls for YouTube API. Use YouTubeService wrapper."
+    severity: error
+  
+  # Performance: Never load all Core ML models at launch
+  no_eager_coreml_loading:
+    name: "Lazy Load Core ML Models"
+    regex: "(?i)(init|awakeFromNib|didFinishLaunching).*\\{[^}]*MLModel\\.load"
+    message: "Never load Core ML models at app launch. Use lazy loading on first use."
+    severity: warning
+
+# Rule configuration
+force_cast: error
+force_try: error
+force_unwrapping: warning # Allow with warning, block try! with custom rule
+line_length:
+  warning: 120
+  error: 140
+  ignores_comments: true
+  ignores_urls: true
+  ignores_function_declarations: true
+  ignores_interpolated_strings: true
+
+type_name:
+  min_length:
+    warning: 3
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - T # Allow single-letter generics
+    - U
+    - V
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - i
+    - j
+    - k
+    - vm # Common ViewModel abbreviation
+
+function_body_length:
+  warning: 50
+  error: 100
+
+function_parameter_count:
+  warning: 5
+  error: 8
+
+cyclomatic_complexity:
+  warning: 10
+  error: 20
+
+nesting:
+  type_level:
+    warning: 2
+    error: 3
+  function_level:
+    warning: 5
+    error: 8
+
+# Vertical whitespace
+vertical_whitespace:
+  max_empty_lines: 2
+
+# Trailing whitespace
+trailing_whitespace:
+  ignores_empty_lines: false
+  ignores_comments: false
+
+# Trailing comma
+trailing_comma:
+  mandatory_comma: true
+
+# Colon spacing
+colon:
+  flexible_right_spacing: false
+  apply_to_dictionaries: true
+
+# Indentation width (2 spaces per CLAUDE.md preference)
+indentation_width:
+  indentation_width: 2
+  include_comments: true
+
+# File header template (optional, can be customized)
+file_header:
+  required_pattern: |
+                    \/\/
+                    \/\/ .*?\.swift
+                    \/\/ MyToob
+                    \/\/
+                    \/\/ Created by .* on \d{1,2}\/\d{1,2}\/\d{2,4}\.
+                    \/\/
+  severity: warning
+
+# Reporter type (xcode for build phase, markdown for CI)
+reporter: "xcode"
+
+# Compilation mode (fast for development, strict for CI)
+# Set strict: true in CI to treat all warnings as errors
+strict: false
