@@ -37,7 +37,10 @@ jobs:
             -scheme MyToob \
             -destination 'platform=macOS' \
             -enableCodeCoverage YES \
-            -derivedDataPath ./DerivedData
+            -derivedDataPath ./DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
@@ -63,7 +66,10 @@ jobs:
           xcodebuild build \
             -scheme MyToob \
             -configuration Release \
-            -derivedDataPath ./DerivedData
+            -derivedDataPath ./DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
