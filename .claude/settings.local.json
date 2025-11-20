@@ -47,7 +47,19 @@
       "Bash(swift test:*)",
       "Bash(git show:*)",
       "mcp__filesystem__read_multiple_files",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(swiftlint --fix:*)",
+      "Bash(find:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run watch:*)",
+      "mcp__serena__search_for_pattern",
+      "mcp__xcodemcp__find_xcresults",
+      "mcp__xcodemcp__xcresult_browse",
+      "Bash(xcrun xcresulttool:*)",
+      "Bash(python3 -m json.tool:*)",
+      "Bash(xargs:*)",
+      "Bash(gh api:*)"
     ],
     "deny": [],
     "ask": []
