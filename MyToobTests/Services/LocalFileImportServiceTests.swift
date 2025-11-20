@@ -206,7 +206,7 @@ final class LocalFileImportServiceTests: XCTestCase {
     guard writer.status == .completed else {
       throw NSError(domain: "TestError", code: 3, userInfo: [
         NSLocalizedDescriptionKey: "Writer failed with status: \(writer.status.rawValue)",
-        NSUnderlyingErrorKey: writer.error as Any
+        NSUnderlyingErrorKey: writer.error as Any,
       ])
     }
 
