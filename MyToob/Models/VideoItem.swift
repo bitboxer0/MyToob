@@ -107,6 +107,7 @@ final class VideoItem {
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
     self.bookmarkData = nil  // YouTube videos don't need bookmarks
+    self.notes = []  // Initialize empty notes array for relationship
   }
 
   /// Designated initializer for local video files
@@ -137,6 +138,7 @@ final class VideoItem {
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
     self.bookmarkData = bookmarkData
+    self.notes = []  // Initialize empty notes array for relationship
   }
 
   /// Computed property for unique identifier (videoID for YouTube, localURL path for local)
