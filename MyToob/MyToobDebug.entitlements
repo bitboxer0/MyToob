@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox DISABLED for Debug builds only -->
+	<!-- This allows reading .env files from project directory -->
+	<!-- DO NOT USE THIS FOR RELEASE BUILDS -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+
+	<!-- Network Access (Required for YouTube Data API) -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- User Selected Files (Required for local video import) -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Keychain Access Groups (Required for OAuth token storage) -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)finley.MyToob</string>
+	</array>
+</dict>
+</plist>

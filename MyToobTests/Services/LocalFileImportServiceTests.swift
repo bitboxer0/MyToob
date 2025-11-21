@@ -75,7 +75,7 @@ final class LocalFileImportServiceTests: XCTestCase {
 
   // MARK: - Bookmark Creation Tests
 
-  func testCreateSecurityScopedBookmark() throws {
+  nonisolated func testCreateSecurityScopedBookmark() throws {
     // Note: Security-scoped bookmarks require user-selected files (via NSOpenPanel).
     // In tests, we create temporary files, so security scoping may not work as expected.
     // This test validates the bookmark creation mechanics.
@@ -103,7 +103,7 @@ final class LocalFileImportServiceTests: XCTestCase {
     XCTAssertFalse(bookmarkData.isEmpty, "Bookmark data should not be empty")
   }
 
-  func testResolveSecurityScopedBookmark() throws {
+  nonisolated func testResolveSecurityScopedBookmark() throws {
     // Note: Security-scoped bookmarks require user-selected files (via NSOpenPanel).
     // In tests, we create temporary files, so security scoping may not work as expected.
     // This test validates the bookmark creation/resolution mechanics.
@@ -162,8 +162,8 @@ final class LocalFileImportServiceTests: XCTestCase {
   // MARK: - Helper Methods
 
   /// Create a temporary test video file
-  /// Note: This creates a minimal valid MP4 file for testing purposes
-  private func createTestVideoFile() throws -> URL {
+  /// Note: This creates a minimal valid MP4 file with actual frames for testing purposes
+  nonisolated private func createTestVideoFile() throws -> URL {
     let tempDir = FileManager.default.temporaryDirectory
     let videoURL = tempDir.appendingPathComponent("test_video_\(UUID().uuidString).mp4")
 
@@ -171,14 +171,28 @@ final class LocalFileImportServiceTests: XCTestCase {
     let writer = try AVAssetWriter(url: videoURL, fileType: .mp4)
 
     // Configure video settings
+    let width = 640
+    let height = 480
     let videoSettings: [String: Any] = [
       AVVideoCodecKey: AVVideoCodecType.h264,
-      AVVideoWidthKey: 640,
-      AVVideoHeightKey: 480,
+      AVVideoWidthKey: width,
+      AVVideoHeightKey: height,
     ]
 
     let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
     videoInput.expectsMediaDataInRealTime = false
+
+    // Configure pixel buffer adaptor for writing frames
+    let pixelBufferAttributes: [String: Any] = [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
+      kCVPixelBufferWidthKey as String: width,
+      kCVPixelBufferHeightKey as String: height,
+    ]
+
+    let pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+      assetWriterInput: videoInput,
+      sourcePixelBufferAttributes: pixelBufferAttributes
+    )
 
     guard writer.canAdd(videoInput) else {
       throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input"])
@@ -192,7 +206,57 @@ final class LocalFileImportServiceTests: XCTestCase {
 
     writer.startSession(atSourceTime: .zero)
 
-    // Mark as finished immediately (creates minimal valid file)
+    // Write a few frames to create a valid video
+    let frameDuration = CMTime(value: 1, timescale: 30)  // 30 FPS
+    let numberOfFrames = 30  // 1 second of video
+
+    for frameIndex in 0..<numberOfFrames {
+      while !videoInput.isReadyForMoreMediaData {
+        Thread.sleep(forTimeInterval: 0.01)
+      }
+
+      let presentationTime = CMTime(value: Int64(frameIndex), timescale: 30)
+
+      guard let pixelBufferPool = pixelBufferAdaptor.pixelBufferPool else {
+        throw NSError(domain: "TestError", code: 4, userInfo: [NSLocalizedDescriptionKey: "Pixel buffer pool unavailable"])
+      }
+
+      var pixelBuffer: CVPixelBuffer?
+      let status = CVPixelBufferPoolCreatePixelBuffer(nil, pixelBufferPool, &pixelBuffer)
+
+      guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+        throw NSError(domain: "TestError", code: 5, userInfo: [NSLocalizedDescriptionKey: "Failed to create pixel buffer"])
+      }
+
+      // Fill pixel buffer with a simple pattern (creates valid frame data)
+      CVPixelBufferLockBaseAddress(buffer, [])
+      defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+
+      if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+        let bufferHeight = CVPixelBufferGetHeight(buffer)
+
+        // Fill with a simple gradient pattern
+        for y in 0..<bufferHeight {
+          let row = baseAddress.advanced(by: y * bytesPerRow)
+          for x in 0..<width {
+            let pixel = row.advanced(by: x * 4)
+            let grayscale = UInt8((x + y + frameIndex) % 256)
+            pixel.storeBytes(of: 255, as: UInt8.self)  // Alpha
+            pixel.advanced(by: 1).storeBytes(of: grayscale, as: UInt8.self)  // Red
+            pixel.advanced(by: 2).storeBytes(of: grayscale, as: UInt8.self)  // Green
+            pixel.advanced(by: 3).storeBytes(of: grayscale, as: UInt8.self)  // Blue
+          }
+        }
+      }
+
+      // Append the pixel buffer
+      guard pixelBufferAdaptor.append(buffer, withPresentationTime: presentationTime) else {
+        throw NSError(domain: "TestError", code: 6, userInfo: [NSLocalizedDescriptionKey: "Failed to append pixel buffer"])
+      }
+    }
+
+    // Mark as finished after writing frames
     videoInput.markAsFinished()
 
     // Wait synchronously for writer to finish

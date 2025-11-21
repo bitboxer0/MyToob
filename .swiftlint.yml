@@ -145,6 +145,7 @@ custom_rules:
   no_direct_keychain_access:
     name: "Use KeychainService Wrapper"
     regex: "SecItem(Add|Update|Delete|CopyMatching)"
+    excluded: "KeychainService\\.swift"
     message: "Never call SecItem* directly. Use KeychainService wrapper for Keychain access."
     severity: error
   

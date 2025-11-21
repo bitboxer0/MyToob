@@ -14,33 +14,69 @@ struct ContentView: View {
   @Environment(\.modelContext) private var modelContext
   @Query private var videoItems: [VideoItem]
 
+  @StateObject private var oauth = OAuth2Handler.shared
+
   @State private var isImporting = false
   @State private var importError: Error?
   @State private var showImportError = false
+  @State private var showOAuthConsent = false
 
   var body: some View {
     NavigationSplitView {
       List {
-        Section("Collections") {
+        Section {
           Label("All Videos", systemImage: "play.rectangle.on.rectangle")
           Label("Recently Watched", systemImage: "clock")
           Label("Favorites", systemImage: "star")
+        } header: {
+          Text("Collections")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("CollectionsSection")
         }
 
-        Section("YouTube") {
-          Label("Subscriptions", systemImage: "person.2")
-          Label("Playlists", systemImage: "list.bullet")
+        Section {
+          if oauth.isAuthenticated {
+            Label("Subscriptions", systemImage: "person.2")
+            Label("Playlists", systemImage: "list.bullet")
+
+            Button {
+              Task {
+                try? oauth.signOut()
+              }
+            } label: {
+              Label("Sign Out", systemImage: "person.crop.circle.badge.xmark")
+            }
+            .foregroundStyle(.red)
+          } else {
+            Button {
+              showOAuthConsent = true
+            } label: {
+              Label("Connect YouTube Account", systemImage: "person.crop.circle.badge.plus")
+            }
+            .accessibilityLabel("Connect YouTube Account")
+            .accessibilityHint("Opens consent screen to authorize YouTube access")
+          }
+        } header: {
+          Text("YouTube")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("YouTubeSection")
         }
 
-        Section("Local Files") {
-          Label("All Videos", systemImage: "folder")
+        Section {
+          Label("All Local Videos", systemImage: "folder")
+            .accessibilityIdentifier("AllLocalVideos")
 
           Button(action: importLocalFiles) {
             Label("Import Local Files", systemImage: "plus.circle")
           }
           .disabled(isImporting)
           .accessibilityLabel("Import Local Files")
+          .accessibilityIdentifier("ImportLocalFilesButton")
           .accessibilityHint("Opens file picker to select video files to import")
+        } header: {
+          Text("Local Files")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("LocalFilesSection")
         }
 
         if !videoItems.isEmpty {
@@ -81,6 +117,9 @@ struct ContentView: View {
       Button("OK") {}
     } message: { error in
       Text(error.localizedDescription)
+    }
+    .sheet(isPresented: $showOAuthConsent) {
+      OAuthConsentView()
     }
   }
 

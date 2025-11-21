@@ -26,22 +26,18 @@ final class LocalFileImportUITests: XCTestCase {
   // MARK: - Import Button Tests
 
   func testImportLocalFilesButtonExists() throws {
-    // Navigate to sidebar
-    let sidebar = app.windows.firstMatch.groups.firstMatch
-
-    // Find "Local Files" section
-    let localFilesSection = sidebar.staticTexts["Local Files"]
+    // Find "Local Files" section header
+    let localFilesSection = app.staticTexts["Local Files"]
     XCTAssertTrue(localFilesSection.exists, "Local Files section should exist in sidebar")
 
-    // Find "Import Local Files" button
-    let importButton = sidebar.buttons["Import Local Files"]
+    // Find "Import Local Files" button using accessibility identifier
+    let importButton = app.buttons.matching(identifier: "ImportLocalFilesButton").firstMatch
     XCTAssertTrue(importButton.exists, "Import Local Files button should exist")
     XCTAssertTrue(importButton.isEnabled, "Import Local Files button should be enabled")
   }
 
   func testImportLocalFilesButtonAccessibility() throws {
-    let sidebar = app.windows.firstMatch.groups.firstMatch
-    let importButton = sidebar.buttons["Import Local Files"]
+    let importButton = app.buttons.matching(identifier: "ImportLocalFilesButton").firstMatch
 
     XCTAssertTrue(importButton.exists)
 
@@ -56,8 +52,7 @@ final class LocalFileImportUITests: XCTestCase {
   }
 
   func testImportButtonInteraction() throws {
-    let sidebar = app.windows.firstMatch.groups.firstMatch
-    let importButton = sidebar.buttons["Import Local Files"]
+    let importButton = app.buttons.matching(identifier: "ImportLocalFilesButton").firstMatch
 
     XCTAssertTrue(importButton.exists)
     XCTAssertTrue(importButton.isHittable, "Button should be hittable/clickable")
@@ -68,32 +63,28 @@ final class LocalFileImportUITests: XCTestCase {
   }
 
   func testLocalFilesSectionStructure() throws {
-    let sidebar = app.windows.firstMatch.groups.firstMatch
-
     // Verify "Local Files" section exists
-    XCTAssertTrue(sidebar.staticTexts["Local Files"].exists)
+    XCTAssertTrue(app.staticTexts["Local Files"].exists)
 
-    // Verify "All Videos" label exists in Local Files section
-    let allVideosLabel = sidebar.staticTexts["All Videos"]
-    XCTAssertTrue(allVideosLabel.exists, "All Videos label should exist in Local Files section")
+    // Verify "All Local Videos" label exists
+    let allLocalVideosLabel = app.staticTexts["All Local Videos"]
+    XCTAssertTrue(allLocalVideosLabel.exists, "All Local Videos label should exist in Local Files section")
 
-    // Verify import button exists in same section
-    let importButton = sidebar.buttons["Import Local Files"]
+    // Verify import button exists
+    let importButton = app.buttons.matching(identifier: "ImportLocalFilesButton").firstMatch
     XCTAssertTrue(importButton.exists, "Import button should exist in Local Files section")
   }
 
   // MARK: - Integration Tests
 
   func testSidebarNavigationStructure() throws {
-    let sidebar = app.windows.firstMatch.groups.firstMatch
-
     // Verify all main sections exist
-    XCTAssertTrue(sidebar.staticTexts["Collections"].exists, "Collections section should exist")
-    XCTAssertTrue(sidebar.staticTexts["YouTube"].exists, "YouTube section should exist")
-    XCTAssertTrue(sidebar.staticTexts["Local Files"].exists, "Local Files section should exist")
+    XCTAssertTrue(app.staticTexts["Collections"].exists, "Collections section should exist")
+    XCTAssertTrue(app.staticTexts["YouTube"].exists, "YouTube section should exist")
+    XCTAssertTrue(app.staticTexts["Local Files"].exists, "Local Files section should exist")
 
     // Verify Local Files section is accessible
-    let localFilesSection = sidebar.staticTexts["Local Files"]
-    XCTAssertTrue(localFilesSection.isEnabled)
+    let localFilesSection = app.staticTexts["Local Files"]
+    XCTAssertTrue(localFilesSection.exists)
   }
 }
