@@ -20,6 +20,7 @@ struct ContentView: View {
   @State private var importError: Error?
   @State private var showImportError = false
   @State private var showOAuthConsent = false
+  @State private var showSubscriptionsImport = false
 
   var body: some View {
     NavigationSplitView {
@@ -38,6 +39,14 @@ struct ContentView: View {
           if oauth.isAuthenticated {
             Label("Subscriptions", systemImage: "person.2")
             Label("Playlists", systemImage: "list.bullet")
+
+            Button {
+              showSubscriptionsImport = true
+            } label: {
+              Label("Import Subscriptions", systemImage: "arrow.down.circle")
+            }
+            .accessibilityLabel("Import Subscriptions")
+            .accessibilityHint("Opens dialog to import YouTube subscriptions")
 
             Button {
               Task {
@@ -120,6 +129,9 @@ struct ContentView: View {
     }
     .sheet(isPresented: $showOAuthConsent) {
       OAuthConsentView()
+    }
+    .sheet(isPresented: $showSubscriptionsImport) {
+      SubscriptionsImportView(modelContext: modelContext)
     }
   }
 

@@ -260,6 +260,19 @@ final class YouTubeService {
 
   // MARK: - Private Methods
 
+  /// Map endpoint string to QuotaBudgetTracker.Endpoint
+  private func mapEndpoint(_ endpoint: String) -> QuotaBudgetTracker.Endpoint {
+    switch endpoint {
+    case "search": return .search
+    case "videos": return .videos
+    case "channels": return .channels
+    case "playlists": return .playlists
+    case "playlistItems": return .playlistItems
+    case "subscriptions": return .subscriptions
+    default: return .videos // Default to lowest cost
+    }
+  }
+
   /// Make authenticated request to YouTube Data API
   private func makeRequest<T: Decodable>(
     endpoint: String,
@@ -278,7 +291,34 @@ final class YouTubeService {
       throw YouTubeAPIError.invalidURL
     }
 
-    // Get access token from OAuth2Handler (automatically refreshes if expired)
+    // Build cache key
+    let cacheKey = CachingLayer.CacheKey(
+      url: requestURL.absoluteString,
+      queryItems: queryItems
+    )
+
+    // STEP 1: Check cache first (avoids API call entirely)
+    if let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) {
+      LoggingService.shared.network.debug("Cache HIT for \(endpoint, privacy: .public)")
+      do {
+        return try jsonDecoder.decode(T.self, from: cachedEntry.responseData)
+      } catch {
+        LoggingService.shared.network.error("Cache corruption detected, fetching fresh data")
+        // Cache corrupted, continue to fetch fresh data
+      }
+    }
+
+    // STEP 2: Check quota budget (after cache check)
+    let endpointEnum = mapEndpoint(endpoint)
+    guard await QuotaBudgetTracker.shared.canMakeRequest(endpoint: endpointEnum) else {
+      let stats = await QuotaBudgetTracker.shared.getQuotaStats()
+      LoggingService.shared.network.error(
+        "Quota budget exceeded for \(endpoint, privacy: .public): \(stats.totalConsumed)/\(stats.dailyLimit)"
+      )
+      throw YouTubeAPIError.quotaBudgetExceeded(consumed: stats.totalConsumed, limit: stats.dailyLimit)
+    }
+
+    // STEP 3: Get access token from OAuth2Handler (automatically refreshes if expired)
     let accessToken: String
     do {
       accessToken = try await OAuth2Handler.shared.getAccessToken()
@@ -295,6 +335,12 @@ final class YouTubeService {
     request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
+    // Add If-None-Match header if we have cached ETag (for 304 validation)
+    if let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) {
+      request.setValue(cachedEntry.etag, forHTTPHeaderField: "If-None-Match")
+      LoggingService.shared.network.debug("Added If-None-Match header with ETag: \(cachedEntry.etag, privacy: .private)")
+    }
+
     // Execute request
     let (data, response) = try await session.data(for: request)
 
@@ -310,7 +356,20 @@ final class YouTubeService {
     // Handle HTTP status codes
     switch httpResponse.statusCode {
     case 200...299:
-      // Success - decode response
+      // Success - cache response and decode
+
+      // Extract ETag if present and cache response
+      if let etag = httpResponse.value(forHTTPHeaderField: "ETag") {
+        CachingLayer.shared.cacheResponse(for: cacheKey, data: data, etag: etag)
+        LoggingService.shared.network.debug(
+          "Cached response for \(endpoint, privacy: .public) with ETag: \(etag, privacy: .private)"
+        )
+      }
+
+      // Record quota consumption (successful API call)
+      await QuotaBudgetTracker.shared.recordRequest(endpoint: endpointEnum)
+
+      // Decode response
       do {
         return try jsonDecoder.decode(T.self, from: data)
       } catch {
@@ -321,6 +380,22 @@ final class YouTubeService {
           )
         }
         throw YouTubeAPIError.invalidResponse
+      }
+
+    case 304:
+      // Not Modified - use cached response (no quota charge)
+      guard let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) else {
+        LoggingService.shared.network.error("304 Not Modified but no cached entry found")
+        throw YouTubeAPIError.cacheCorruption
+      }
+
+      LoggingService.shared.network.info("304 Not Modified - using cached response (no quota charge)")
+
+      do {
+        return try jsonDecoder.decode(T.self, from: cachedEntry.responseData)
+      } catch {
+        LoggingService.shared.network.error("Failed to decode cached response")
+        throw YouTubeAPIError.cacheCorruption
       }
 
     case 401:
@@ -343,7 +418,16 @@ final class YouTubeService {
 
     case 429:
       LoggingService.shared.network.error("YouTube API rate limit exceeded (429)")
-      throw YouTubeAPIError.rateLimitExceeded
+
+      // Trigger exponential backoff and circuit breaker logic
+      do {
+        try await QuotaBudgetTracker.shared.handle429Response(endpoint: endpointEnum)
+        // If backoff succeeds, throw retriable error (caller can retry)
+        throw YouTubeAPIError.rateLimitExceeded
+      } catch let error as YouTubeAPIError {
+        // Circuit breaker opened or other quota error
+        throw error
+      }
 
     case 500...599:
       LoggingService.shared.network.error(
@@ -368,10 +452,13 @@ enum YouTubeAPIError: LocalizedError {
   case unauthorized
   case forbidden
   case quotaExceeded
+  case quotaBudgetExceeded(consumed: Int, limit: Int)
   case rateLimitExceeded
+  case circuitBreakerOpen
   case serverError(statusCode: Int)
   case unexpectedStatusCode(statusCode: Int)
   case invalidResponse
+  case cacheCorruption
   case networkError(Error)
   case channelNotFound(channelID: String)
 
@@ -389,8 +476,17 @@ enum YouTubeAPIError: LocalizedError {
     case .quotaExceeded:
       return "YouTube API quota exceeded. Please try again later."
 
+    case .quotaBudgetExceeded(let consumed, let limit):
+      return "Daily API quota budget exceeded (\(consumed)/\(limit) units). Quota resets at midnight Pacific Time."
+
     case .rateLimitExceeded:
       return "YouTube API rate limit exceeded. Please try again in a few moments."
+
+    case .circuitBreakerOpen:
+      return "YouTube API circuit breaker is open due to repeated failures. Please try again in 1 hour."
+
+    case .cacheCorruption:
+      return "Cache data is corrupted. Fetching fresh data from API."
 
     case .serverError(let statusCode):
       return "YouTube server error (HTTP \(statusCode)). Please try again later."
@@ -417,8 +513,17 @@ enum YouTubeAPIError: LocalizedError {
     case .quotaExceeded:
       return "The daily YouTube API quota has been exceeded. Quota resets at midnight Pacific Time. Local file playback is still available."
 
+    case .quotaBudgetExceeded:
+      return "Use local file playback or wait until quota resets. Cached data will be used where available."
+
     case .rateLimitExceeded:
       return "Too many requests in a short time. Please wait a moment before trying again."
+
+    case .circuitBreakerOpen:
+      return "The service is temporarily unavailable to prevent further errors. Normal operation will resume automatically."
+
+    case .cacheCorruption:
+      return "The cached data will be cleared and fresh data will be fetched."
 
     case .serverError:
       return "YouTube servers are experiencing issues. Please try again in a few minutes."
