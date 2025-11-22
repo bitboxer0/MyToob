@@ -44,6 +44,63 @@ final class YouTubeService {
   private let session: URLSession
   private let jsonDecoder: JSONDecoder
 
+  /// Default field filters for YouTube API partial responses
+  /// Reduces payload sizes by ~60-70% while retaining essential data
+  private struct DefaultFields {
+    static let search = "items(id,snippet(title,channelTitle,thumbnails/default)),nextPageToken,pageInfo"
+    static let videos = "items(id,snippet(title,description,channelId,channelTitle,publishedAt,thumbnails),contentDetails(duration),statistics(viewCount,likeCount)),pageInfo"
+    static let channels = "items(id,snippet(title,description,thumbnails),statistics),pageInfo"
+    static let playlists = "items(id,snippet(title,description,thumbnails),contentDetails(itemCount)),nextPageToken,pageInfo"
+    static let playlistItems = "items(id,snippet(title,thumbnails,resourceId),contentDetails(videoId)),nextPageToken,pageInfo"
+    static let subscriptions = "items(id,snippet(title,resourceId,thumbnails)),nextPageToken,pageInfo"
+  }
+
+  /// Retry policy configuration for transient network failures
+  private struct RetryPolicy {
+    /// Maximum retry attempts for transient errors (timeouts, 5xx server errors)
+    static let maxRetries = 2
+
+    /// Delay before first retry (seconds)
+    static let initialRetryDelay: TimeInterval = 2.0
+
+    /// Delay multiplier for exponential backoff
+    static let retryDelayMultiplier: TimeInterval = 2.0
+
+    /// Errors that should trigger retry
+    static func shouldRetry(_ error: Error, attempt: Int) -> Bool {
+      // Don't retry if max attempts reached
+      guard attempt < maxRetries else { return false }
+
+      // Retry on network timeouts
+      if let urlError = error as? URLError {
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost, .dnsLookupFailed:
+          return true
+        default:
+          return false
+        }
+      }
+
+      // Retry on 5xx server errors (not client errors)
+      if let apiError = error as? YouTubeAPIError {
+        switch apiError {
+        case .serverError: // 5xx errors
+          return true
+        case .unauthorized, .forbidden, .quotaExceeded, .quotaBudgetExceeded, .rateLimitExceeded, .circuitBreakerOpen, .invalidURL, .invalidResponse, .cacheCorruption, .unexpectedStatusCode, .channelNotFound, .networkError:
+          // Don't retry client errors (4xx) - they won't succeed on retry
+          return false
+        }
+      }
+
+      return false
+    }
+
+    /// Calculate delay for retry attempt
+    static func retryDelay(for attempt: Int) -> TimeInterval {
+      return initialRetryDelay * pow(retryDelayMultiplier, Double(attempt))
+    }
+  }
+
   // MARK: - Initialization
 
   private init() {
@@ -58,6 +115,19 @@ final class YouTubeService {
     self.jsonDecoder.keyDecodingStrategy = .convertFromSnakeCase
   }
 
+  /// Internal initializer for testing with custom URLSession
+  /// - Parameters:
+  ///   - session: Custom URLSession for test dependency injection
+  ///   - jsonDecoder: Optional custom JSONDecoder
+  internal init(session: URLSession, jsonDecoder: JSONDecoder? = nil) {
+    self.session = session
+
+    // Configure JSONDecoder
+    let decoder = jsonDecoder ?? JSONDecoder()
+    decoder.keyDecodingStrategy = .convertFromSnakeCase
+    self.jsonDecoder = decoder
+  }
+
   // MARK: - Search API
 
   /// Search for videos using YouTube Data API search.list endpoint
@@ -65,12 +135,14 @@ final class YouTubeService {
   ///   - query: Search query string
   ///   - maxResults: Maximum number of results (1-50, default: 25)
   ///   - pageToken: Page token for pagination
+  ///   - fields: Optional field filter for partial response (defaults to essential fields)
   /// - Returns: Search response with video results
   /// - Throws: YouTubeAPIError if request fails
   func searchVideos(
     query: String,
     maxResults: Int = 25,
-    pageToken: String? = nil
+    pageToken: String? = nil,
+    fields: String? = DefaultFields.search
   ) async throws -> YouTubeSearchResponse {
     var queryItems = [
       URLQueryItem(name: "part", value: "snippet"),
@@ -89,7 +161,8 @@ final class YouTubeService {
 
     return try await makeRequest(
       endpoint: "search",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
   }
 
@@ -99,11 +172,13 @@ final class YouTubeService {
   /// - Parameters:
   ///   - videoIDs: Array of video IDs (max 50)
   ///   - parts: Parts to include (snippet, contentDetails, statistics, etc.)
+  ///   - fields: Field filter for partial response (defaults to essential fields)
   /// - Returns: Array of video details
   /// - Throws: YouTubeAPIError if request fails
   func fetchVideoDetails(
     videoIDs: [String],
-    parts: [String] = ["snippet", "contentDetails", "statistics"]
+    parts: [String] = ["snippet", "contentDetails", "statistics"],
+    fields: String? = DefaultFields.videos
   ) async throws -> [YouTubeVideo] {
     guard !videoIDs.isEmpty else {
       LoggingService.shared.network.warning("fetchVideoDetails called with empty videoIDs array")
@@ -123,7 +198,8 @@ final class YouTubeService {
 
     let response: YouTubeVideoListResponse = try await makeRequest(
       endpoint: "videos",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
 
     return response.items
@@ -135,11 +211,13 @@ final class YouTubeService {
   /// - Parameters:
   ///   - channelID: YouTube channel ID
   ///   - parts: Parts to include (snippet, statistics, contentDetails, etc.)
+  ///   - fields: Field filter for partial response (defaults to essential fields)
   /// - Returns: Channel information
   /// - Throws: YouTubeAPIError if request fails or channel not found
   func fetchChannelInfo(
     channelID: String,
-    parts: [String] = ["snippet", "statistics", "contentDetails"]
+    parts: [String] = ["snippet", "statistics", "contentDetails"],
+    fields: String? = DefaultFields.channels
   ) async throws -> YouTubeChannel {
     let queryItems = [
       URLQueryItem(name: "part", value: parts.joined(separator: ",")),
@@ -152,7 +230,8 @@ final class YouTubeService {
 
     let response: YouTubeChannelResponse = try await makeRequest(
       endpoint: "channels",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
 
     guard let channel = response.items.first else {
@@ -169,12 +248,14 @@ final class YouTubeService {
   ///   - channelID: YouTube channel ID
   ///   - maxResults: Maximum number of results (default: 25)
   ///   - pageToken: Page token for pagination
+  ///   - fields: Field filter for partial response (defaults to essential fields)
   /// - Returns: Playlist response
   /// - Throws: YouTubeAPIError if request fails
   func fetchPlaylists(
     channelID: String,
     maxResults: Int = 25,
-    pageToken: String? = nil
+    pageToken: String? = nil,
+    fields: String? = DefaultFields.playlists
   ) async throws -> YouTubePlaylistResponse {
     var queryItems = [
       URLQueryItem(name: "part", value: "snippet,contentDetails"),
@@ -192,7 +273,8 @@ final class YouTubeService {
 
     return try await makeRequest(
       endpoint: "playlists",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
   }
 
@@ -201,12 +283,14 @@ final class YouTubeService {
   ///   - playlistID: YouTube playlist ID
   ///   - maxResults: Maximum number of results (default: 50)
   ///   - pageToken: Page token for pagination
+  ///   - fields: Field filter for partial response (defaults to essential fields)
   /// - Returns: Playlist items response
   /// - Throws: YouTubeAPIError if request fails
   func fetchPlaylistItems(
     playlistID: String,
     maxResults: Int = 50,
-    pageToken: String? = nil
+    pageToken: String? = nil,
+    fields: String? = DefaultFields.playlistItems
   ) async throws -> YouTubePlaylistItemsResponse {
     var queryItems = [
       URLQueryItem(name: "part", value: "snippet,contentDetails"),
@@ -224,7 +308,8 @@ final class YouTubeService {
 
     return try await makeRequest(
       endpoint: "playlistItems",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
   }
 
@@ -234,11 +319,13 @@ final class YouTubeService {
   /// - Parameters:
   ///   - maxResults: Maximum number of results (default: 50)
   ///   - pageToken: Page token for pagination
+  ///   - fields: Field filter for partial response (defaults to essential fields)
   /// - Returns: Subscription response
   /// - Throws: YouTubeAPIError if request fails
   func fetchSubscriptions(
     maxResults: Int = 50,
-    pageToken: String? = nil
+    pageToken: String? = nil,
+    fields: String? = DefaultFields.subscriptions
   ) async throws -> YouTubeSubscriptionResponse {
     var queryItems = [
       URLQueryItem(name: "part", value: "snippet"),
@@ -254,7 +341,8 @@ final class YouTubeService {
 
     return try await makeRequest(
       endpoint: "subscriptions",
-      queryItems: queryItems
+      queryItems: queryItems,
+      fields: fields
     )
   }
 
@@ -273,10 +361,11 @@ final class YouTubeService {
     }
   }
 
-  /// Make authenticated request to YouTube Data API
+  /// Make authenticated request to YouTube Data API with retry logic and stale cache fallback
   private func makeRequest<T: Decodable>(
     endpoint: String,
-    queryItems: [URLQueryItem]
+    queryItems: [URLQueryItem],
+    fields: String? = nil
   ) async throws -> T {
     // Build URL
     guard let baseURL = URL(string: baseURL) else {
@@ -285,7 +374,13 @@ final class YouTubeService {
 
     let url = baseURL.appendingPathComponent(endpoint)
     var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-    components?.queryItems = queryItems
+
+    // Add fields parameter if provided
+    var mutableQueryItems = queryItems
+    if let fields = fields {
+      mutableQueryItems.append(URLQueryItem(name: "fields", value: fields))
+    }
+    components?.queryItems = mutableQueryItems
 
     guard let requestURL = components?.url else {
       throw YouTubeAPIError.invalidURL
@@ -329,118 +424,167 @@ final class YouTubeService {
       throw YouTubeAPIError.unauthorized
     }
 
-    // Build request with Bearer token
-    var request = URLRequest(url: requestURL)
-    request.httpMethod = "GET"
-    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    // STEP 4: Retry loop for transient errors (network timeouts, 5xx server errors)
+    var lastError: Error?
+    for attempt in 0...RetryPolicy.maxRetries {
+      do {
+        // Build request with Bearer token
+        var request = URLRequest(url: requestURL)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-    // Add If-None-Match header if we have cached ETag (for 304 validation)
-    if let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) {
-      request.setValue(cachedEntry.etag, forHTTPHeaderField: "If-None-Match")
-      LoggingService.shared.network.debug("Added If-None-Match header with ETag: \(cachedEntry.etag, privacy: .private)")
-    }
+        // Add If-None-Match header if we have cached ETag (for 304 validation)
+        if let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) {
+          request.setValue(cachedEntry.etag, forHTTPHeaderField: "If-None-Match")
+          LoggingService.shared.network.debug("Added If-None-Match header with ETag: \(cachedEntry.etag, privacy: .private)")
+        }
 
-    // Execute request
-    let (data, response) = try await session.data(for: request)
+        // Execute request
+        let (data, response) = try await session.data(for: request)
 
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw YouTubeAPIError.invalidResponse
-    }
+        guard let httpResponse = response as? HTTPURLResponse else {
+          throw YouTubeAPIError.invalidResponse
+        }
 
-    // Log response
-    LoggingService.shared.network.debug(
-      "YouTube API response: \(httpResponse.statusCode, privacy: .public) - \(data.count, privacy: .public) bytes"
-    )
-
-    // Handle HTTP status codes
-    switch httpResponse.statusCode {
-    case 200...299:
-      // Success - cache response and decode
-
-      // Extract ETag if present and cache response
-      if let etag = httpResponse.value(forHTTPHeaderField: "ETag") {
-        CachingLayer.shared.cacheResponse(for: cacheKey, data: data, etag: etag)
-        LoggingService.shared.network.debug(
-          "Cached response for \(endpoint, privacy: .public) with ETag: \(etag, privacy: .private)"
+        // Log response with payload size and filtering status
+        let filteringStatus = fields != nil ? " (filtered)" : " (full)"
+        LoggingService.shared.network.info(
+          "YouTube API response: \(endpoint, privacy: .public) - \(httpResponse.statusCode, privacy: .public) - \(data.count, privacy: .public) bytes\(filteringStatus)"
         )
-      }
 
-      // Record quota consumption (successful API call)
-      await QuotaBudgetTracker.shared.recordRequest(endpoint: endpointEnum)
+        // Handle HTTP status codes
+        switch httpResponse.statusCode {
+        case 200...299:
+          // Success - cache response and decode
 
-      // Decode response
-      do {
-        return try jsonDecoder.decode(T.self, from: data)
-      } catch {
-        // Log decoding error with response data for debugging
-        if let jsonString = String(data: data, encoding: .utf8) {
+          // Extract ETag if present and cache response
+          if let etag = httpResponse.value(forHTTPHeaderField: "ETag") {
+            CachingLayer.shared.cacheResponse(for: cacheKey, data: data, etag: etag)
+            LoggingService.shared.network.debug(
+              "Cached response for \(endpoint, privacy: .public) with ETag: \(etag, privacy: .private)"
+            )
+          }
+
+          // Record quota consumption (successful API call)
+          await QuotaBudgetTracker.shared.recordRequest(endpoint: endpointEnum)
+
+          // Decode response
+          do {
+            return try jsonDecoder.decode(T.self, from: data)
+          } catch {
+            // Log decoding error with response data for debugging
+            if let jsonString = String(data: data, encoding: .utf8) {
+              LoggingService.shared.network.error(
+                "Failed to decode YouTube API response: \(error.localizedDescription, privacy: .public)\nResponse: \(jsonString, privacy: .private)"
+              )
+            }
+            throw YouTubeAPIError.invalidResponse
+          }
+
+        case 304:
+          // Not Modified - use cached response (no quota charge)
+          guard let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) else {
+            LoggingService.shared.network.error("304 Not Modified but no cached entry found")
+            throw YouTubeAPIError.cacheCorruption
+          }
+
+          LoggingService.shared.network.info("304 Not Modified - using cached response (no quota charge)")
+
+          do {
+            return try jsonDecoder.decode(T.self, from: cachedEntry.responseData)
+          } catch {
+            LoggingService.shared.network.error("Failed to decode cached response")
+            throw YouTubeAPIError.cacheCorruption
+          }
+
+        case 401:
+          LoggingService.shared.network.error("YouTube API returned 401 Unauthorized")
+          throw YouTubeAPIError.unauthorized
+
+        case 403:
+          // Try to parse error details to distinguish quota vs other 403 errors
+          if let errorResponse = try? jsonDecoder.decode(YouTubeAPIErrorResponse.self, from: data),
+            let reason = errorResponse.error.errors?.first?.reason {
+            if reason == "quotaExceeded" || reason == "dailyLimitExceeded" {
+              LoggingService.shared.network.error(
+                "YouTube API quota exceeded: \(errorResponse.error.message, privacy: .public)"
+              )
+              throw YouTubeAPIError.quotaExceeded
+            }
+          }
+          LoggingService.shared.network.error("YouTube API returned 403 Forbidden")
+          throw YouTubeAPIError.forbidden
+
+        case 429:
+          LoggingService.shared.network.error("YouTube API rate limit exceeded (429)")
+
+          // Trigger exponential backoff and circuit breaker logic
+          do {
+            try await QuotaBudgetTracker.shared.handle429Response(endpoint: endpointEnum)
+            // If backoff succeeds, throw retriable error (caller can retry)
+            throw YouTubeAPIError.rateLimitExceeded
+          } catch let error as YouTubeAPIError {
+            // Circuit breaker opened or other quota error
+            throw error
+          }
+
+        case 500...599:
           LoggingService.shared.network.error(
-            "Failed to decode YouTube API response: \(error.localizedDescription, privacy: .public)\nResponse: \(jsonString, privacy: .private)"
+            "YouTube API server error: HTTP \(httpResponse.statusCode, privacy: .public)"
           )
-        }
-        throw YouTubeAPIError.invalidResponse
-      }
+          throw YouTubeAPIError.serverError(statusCode: httpResponse.statusCode)
 
-    case 304:
-      // Not Modified - use cached response (no quota charge)
-      guard let cachedEntry = CachingLayer.shared.getCachedResponse(for: cacheKey) else {
-        LoggingService.shared.network.error("304 Not Modified but no cached entry found")
-        throw YouTubeAPIError.cacheCorruption
-      }
-
-      LoggingService.shared.network.info("304 Not Modified - using cached response (no quota charge)")
-
-      do {
-        return try jsonDecoder.decode(T.self, from: cachedEntry.responseData)
-      } catch {
-        LoggingService.shared.network.error("Failed to decode cached response")
-        throw YouTubeAPIError.cacheCorruption
-      }
-
-    case 401:
-      LoggingService.shared.network.error("YouTube API returned 401 Unauthorized")
-      throw YouTubeAPIError.unauthorized
-
-    case 403:
-      // Try to parse error details to distinguish quota vs other 403 errors
-      if let errorResponse = try? jsonDecoder.decode(YouTubeAPIErrorResponse.self, from: data),
-        let reason = errorResponse.error.errors?.first?.reason {
-        if reason == "quotaExceeded" || reason == "dailyLimitExceeded" {
+        default:
           LoggingService.shared.network.error(
-            "YouTube API quota exceeded: \(errorResponse.error.message, privacy: .public)"
+            "YouTube API unexpected status code: \(httpResponse.statusCode, privacy: .public)"
           )
-          throw YouTubeAPIError.quotaExceeded
+          throw YouTubeAPIError.unexpectedStatusCode(statusCode: httpResponse.statusCode)
+        }
+
+      } catch {
+        lastError = error
+
+        // Check if we should retry this error
+        if RetryPolicy.shouldRetry(error, attempt: attempt) {
+          let delay = RetryPolicy.retryDelay(for: attempt)
+          LoggingService.shared.network.warning(
+            "Retrying \(endpoint, privacy: .public) after transient error (attempt \(attempt + 1)/\(RetryPolicy.maxRetries + 1)): \(error.localizedDescription, privacy: .public)"
+          )
+          try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+          continue
+        } else {
+          // Error is not retriable (4xx client errors, etc.)
+          throw error
         }
       }
-      LoggingService.shared.network.error("YouTube API returned 403 Forbidden")
-      throw YouTubeAPIError.forbidden
-
-    case 429:
-      LoggingService.shared.network.error("YouTube API rate limit exceeded (429)")
-
-      // Trigger exponential backoff and circuit breaker logic
-      do {
-        try await QuotaBudgetTracker.shared.handle429Response(endpoint: endpointEnum)
-        // If backoff succeeds, throw retriable error (caller can retry)
-        throw YouTubeAPIError.rateLimitExceeded
-      } catch let error as YouTubeAPIError {
-        // Circuit breaker opened or other quota error
-        throw error
-      }
-
-    case 500...599:
-      LoggingService.shared.network.error(
-        "YouTube API server error: HTTP \(httpResponse.statusCode, privacy: .public)"
-      )
-      throw YouTubeAPIError.serverError(statusCode: httpResponse.statusCode)
-
-    default:
-      LoggingService.shared.network.error(
-        "YouTube API unexpected status code: \(httpResponse.statusCode, privacy: .public)"
-      )
-      throw YouTubeAPIError.unexpectedStatusCode(statusCode: httpResponse.statusCode)
     }
+
+    // All retries exhausted - check for stale cache fallback
+    if let staleEntry = CachingLayer.shared.getStaleCachedResponse(for: cacheKey) {
+      LoggingService.shared.network.warning(
+        "All retries failed for \(endpoint, privacy: .public), falling back to stale cached data"
+      )
+      do {
+        return try jsonDecoder.decode(T.self, from: staleEntry.responseData)
+      } catch {
+        LoggingService.shared.network.error("Failed to decode stale cached data")
+        // Fall through to throw last error
+      }
+    }
+
+    // No stale cache available, throw the last error with enhanced description
+    if let urlError = lastError as? URLError {
+      throw YouTubeAPIError.networkError(
+        urlError,
+        recoverySuggestion: "Check your internet connection and try again. The app will use cached data when available."
+      )
+    }
+
+    throw lastError ?? YouTubeAPIError.networkError(
+      URLError(.unknown),
+      recoverySuggestion: "An unknown network error occurred. Please try again."
+    )
   }
 }
 
@@ -459,7 +603,7 @@ enum YouTubeAPIError: LocalizedError {
   case unexpectedStatusCode(statusCode: Int)
   case invalidResponse
   case cacheCorruption
-  case networkError(Error)
+  case networkError(Error, recoverySuggestion: String? = nil)
   case channelNotFound(channelID: String)
 
   var errorDescription: String? {
@@ -497,7 +641,7 @@ enum YouTubeAPIError: LocalizedError {
     case .invalidResponse:
       return "Invalid response from YouTube API."
 
-    case .networkError(let error):
+    case .networkError(let error, _):
       return "Network error: \(error.localizedDescription)"
 
     case .channelNotFound(let channelID):
@@ -528,8 +672,8 @@ enum YouTubeAPIError: LocalizedError {
     case .serverError:
       return "YouTube servers are experiencing issues. Please try again in a few minutes."
 
-    case .networkError:
-      return "Check your internet connection and try again."
+    case .networkError(_, let suggestion):
+      return suggestion ?? "Check your internet connection and try again."
 
     default:
       return nil

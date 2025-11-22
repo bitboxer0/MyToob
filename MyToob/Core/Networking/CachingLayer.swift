@@ -139,6 +139,34 @@ final class CachingLayer {
     }
   }
 
+  /// Retrieve stale cached response (ignores expiration) for offline fallback
+  /// - Parameter key: Cache key combining URL and query parameters
+  /// - Returns: Cached entry if found, regardless of expiration, nil otherwise
+  /// - Note: Used when network is unavailable to provide degraded service with stale data
+  func getStaleCachedResponse(for key: CacheKey) -> CacheEntry? {
+    return queue.sync {
+      guard var entry = cache[key] else {
+        misses += 1
+        LoggingService.shared.network.debug("Stale cache MISS for \(key.url, privacy: .public)")
+        return nil
+      }
+
+      // Update last accessed time (LRU tracking)
+      entry.lastAccessedAt = Date()
+      cache[key] = entry
+
+      // Track as miss for metrics (since it's stale data)
+      misses += 1
+
+      let age = Date().timeIntervalSince(entry.cachedAt)
+      LoggingService.shared.network.warning(
+        "Returning STALE cache for \(key.url, privacy: .public) (age: \(age / 3600, format: .fixed(precision: 1), privacy: .public)h)"
+      )
+
+      return entry
+    }
+  }
+
   /// Cache response with ETag
   /// - Parameters:
   ///   - key: Cache key
