@@ -46,13 +46,13 @@ final class YouTubeService {
 
   /// Default field filters for YouTube API partial responses
   /// Reduces payload sizes by ~60-70% while retaining essential data
-  private struct DefaultFields {
-    static let search = "items(id,snippet(title,channelTitle,thumbnails/default)),nextPageToken,pageInfo"
-    static let videos = "items(id,snippet(title,description,channelId,channelTitle,publishedAt,thumbnails),contentDetails(duration),statistics(viewCount,likeCount)),pageInfo"
-    static let channels = "items(id,snippet(title,description,thumbnails),statistics),pageInfo"
-    static let playlists = "items(id,snippet(title,description,thumbnails),contentDetails(itemCount)),nextPageToken,pageInfo"
-    static let playlistItems = "items(id,snippet(title,thumbnails,resourceId),contentDetails(videoId)),nextPageToken,pageInfo"
-    static let subscriptions = "items(id,snippet(title,resourceId,thumbnails)),nextPageToken,pageInfo"
+  private struct DefaultFields: Sendable {
+    nonisolated static let search = "items(id,snippet(title,channelTitle,thumbnails/default)),nextPageToken,pageInfo"
+    nonisolated static let videos = "items(id,snippet(title,description,channelId,channelTitle,publishedAt,thumbnails),contentDetails(duration),statistics(viewCount,likeCount)),pageInfo"
+    nonisolated static let channels = "items(id,snippet(title,description,thumbnails),statistics),pageInfo"
+    nonisolated static let playlists = "items(id,snippet(title,description,thumbnails),contentDetails(itemCount)),nextPageToken,pageInfo"
+    nonisolated static let playlistItems = "items(id,snippet(title,thumbnails,resourceId),contentDetails(videoId)),nextPageToken,pageInfo"
+    nonisolated static let subscriptions = "items(id,snippet(title,resourceId,thumbnails)),nextPageToken,pageInfo"
   }
 
   /// Retry policy configuration for transient network failures
@@ -405,6 +405,7 @@ final class YouTubeService {
 
     // STEP 2: Check quota budget (after cache check)
     let endpointEnum = mapEndpoint(endpoint)
+    // Note: await required for @MainActor isolation (QuotaBudgetTracker), not async operations
     guard await QuotaBudgetTracker.shared.canMakeRequest(endpoint: endpointEnum) else {
       let stats = await QuotaBudgetTracker.shared.getQuotaStats()
       LoggingService.shared.network.error(
