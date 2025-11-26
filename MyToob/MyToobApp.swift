@@ -20,17 +20,19 @@ struct MyToobApp: App {
   }
 
   var sharedModelContainer: ModelContainer = {
-    let schema = Schema([
-      VideoItem.self,
-      ClusterLabel.self,
-      Note.self,
-      ChannelBlacklist.self,
-    ])
+    // Use versioned schema with migration plan for safe schema upgrades
+    let schema = Schema(versionedSchema: SchemaV2.self)
     let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
     do {
-      let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-      LoggingService.shared.persistence.info("ModelContainer initialized successfully")
+      let container = try ModelContainer(
+        for: schema,
+        migrationPlan: MyToobMigrationPlan.self,
+        configurations: [modelConfiguration]
+      )
+      LoggingService.shared.persistence.info(
+        "ModelContainer initialized with migration plan (schema v\(SchemaV2.versionIdentifier.description, privacy: .public))"
+      )
       return container
     } catch {
       LoggingService.shared.persistence.fault(
