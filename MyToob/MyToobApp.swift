@@ -22,7 +22,27 @@ struct MyToobApp: App {
   var sharedModelContainer: ModelContainer = {
     // Use versioned schema with migration plan for safe schema upgrades
     let schema = Schema(versionedSchema: SchemaV2.self)
-    let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+    // Configure CloudKit sync if enabled
+    let modelConfiguration: ModelConfiguration
+    if Configuration.cloudKitSyncEnabled {
+      // CloudKit-enabled configuration with private database
+      modelConfiguration = ModelConfiguration(
+        schema: schema,
+        isStoredInMemoryOnly: false,
+        cloudKitDatabase: .private(Configuration.cloudKitContainerIdentifier)
+      )
+      LoggingService.shared.cloudKit.info(
+        "CloudKit sync enabled with container: \(Configuration.cloudKitContainerIdentifier, privacy: .public)"
+      )
+    } else {
+      // Local-only configuration (no CloudKit sync)
+      modelConfiguration = ModelConfiguration(
+        schema: schema,
+        isStoredInMemoryOnly: false
+      )
+      LoggingService.shared.cloudKit.info("CloudKit sync disabled - using local storage only")
+    }
 
     do {
       let container = try ModelContainer(
