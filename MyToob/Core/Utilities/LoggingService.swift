@@ -66,6 +66,10 @@ final class LoggingService {
   /// Use for: view lifecycle, user interactions, navigation
   let ui: Logger
 
+  /// Logger for data persistence operations
+  /// Use for: SwiftData operations, model migrations, storage errors
+  let persistence: Logger
+
   // MARK: - Initialization
 
   private init() {
@@ -76,6 +80,7 @@ final class LoggingService {
     self.player = Logger(subsystem: subsystem, category: "player")
     self.sync = Logger(subsystem: subsystem, category: "sync")
     self.ui = Logger(subsystem: subsystem, category: "ui")
+    self.persistence = Logger(subsystem: subsystem, category: "persistence")
   }
 
   // MARK: - Log Level Guidelines
