@@ -30,10 +30,10 @@ struct MyToobApp: App {
 
     do {
       let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-      LoggingService.shared.app.info("ModelContainer initialized successfully")
+      LoggingService.shared.persistence.info("ModelContainer initialized successfully")
       return container
     } catch {
-      LoggingService.shared.app.fault(
+      LoggingService.shared.persistence.fault(
         "Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
       fatalError("Could not create ModelContainer: \(error)")
     }
