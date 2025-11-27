@@ -35,6 +35,19 @@ enum SchemaV2: VersionedSchema {
 
 /// VideoItem model version 2 - adds `lastAccessedAt` for access tracking.
 /// Mirrors all V1 properties plus the new optional date property.
+///
+/// ## Schema Alignment Requirement
+/// **IMPORTANT:** This model must stay property-aligned with `VideoItem` (in Models/VideoItem.swift).
+/// SwiftData versioned schemas require separate model types for each version, which means:
+/// - Any property added to `VideoItem` must also be added to `VideoItemV2` (and future versions)
+/// - Any property changes require coordinated updates across both models
+/// - When adding a new schema version (V3, etc.), create a new `VideoItemV3` model class
+///
+/// Keep these properties synchronized:
+/// - `videoID`, `localURL`, `title`, `channelID`, `duration`, `watchProgress`, `isLocal`
+/// - `aiTopicTagsData`/`aiTopicTags`, `embeddingData`/`embedding`
+/// - `addedAt`, `lastWatchedAt`, `notes`, `bookmarkData`
+/// - V2 addition: `lastAccessedAt`
 @Model
 final class VideoItemV2 {
   /// YouTube video ID (e.g., "dQw4w9WgXcQ"). Nil for local files.
@@ -182,6 +195,11 @@ final class VideoItemV2 {
     } else if let localURL = localURL {
       return localURL.path
     }
+    // FIXME: This fallback generates a new UUID on every access, causing instability in equality
+    // checks and persistence. Before shipping, either:
+    // 1. Enforce that videoID or localURL is always set (remove this fallback entirely), or
+    // 2. Store a generated stable ID as a persisted property when neither is present.
+    // This should never happen in practice since all initializers require one of videoID/localURL.
     return UUID().uuidString
   }
 
