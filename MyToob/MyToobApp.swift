@@ -20,17 +20,39 @@ struct MyToobApp: App {
   }
 
   var sharedModelContainer: ModelContainer = {
-    let schema = Schema([
-      VideoItem.self,
-      ClusterLabel.self,
-      Note.self,
-      ChannelBlacklist.self,
-    ])
-    let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    // Use versioned schema with migration plan for safe schema upgrades
+    let schema = Schema(versionedSchema: SchemaV2.self)
+
+    // Configure CloudKit sync if enabled
+    let modelConfiguration: ModelConfiguration
+    if Configuration.cloudKitSyncEnabled {
+      // CloudKit-enabled configuration with private database
+      modelConfiguration = ModelConfiguration(
+        schema: schema,
+        isStoredInMemoryOnly: false,
+        cloudKitDatabase: .private(Configuration.cloudKitContainerIdentifier)
+      )
+      LoggingService.shared.cloudKit.info(
+        "CloudKit sync enabled with container: \(Configuration.cloudKitContainerIdentifier, privacy: .public)"
+      )
+    } else {
+      // Local-only configuration (no CloudKit sync)
+      modelConfiguration = ModelConfiguration(
+        schema: schema,
+        isStoredInMemoryOnly: false
+      )
+      LoggingService.shared.cloudKit.info("CloudKit sync disabled - using local storage only")
+    }
 
     do {
-      let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-      LoggingService.shared.persistence.info("ModelContainer initialized successfully")
+      let container = try ModelContainer(
+        for: schema,
+        migrationPlan: MyToobMigrationPlan.self,
+        configurations: [modelConfiguration]
+      )
+      LoggingService.shared.persistence.info(
+        "ModelContainer initialized with migration plan (schema v\(SchemaV2.versionIdentifier.description, privacy: .public))"
+      )
       return container
     } catch {
       LoggingService.shared.persistence.fault(

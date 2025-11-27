@@ -19,6 +19,26 @@ import OSLog
 /// let clientSecret = Configuration.googleOAuthClientSecret
 /// ```
 enum Configuration {
+  // MARK: - CloudKit Configuration
+
+  /// CloudKit container identifier for iCloud sync.
+  /// Format: iCloud.{bundle-identifier}
+  /// Registered in Apple Developer portal and Xcode capabilities.
+  static let cloudKitContainerIdentifier = "iCloud.finley.MyToob"
+
+  /// Whether CloudKit sync is enabled.
+  /// Default: false (requires paid Apple Developer account and entitlement configuration)
+  /// Set CLOUDKIT_SYNC_ENABLED=true in environment to enable after configuring entitlements.
+  /// When disabled, app uses local-only storage without iCloud sync.
+  static var cloudKitSyncEnabled: Bool {
+    // Check environment override
+    if let value = getValue(for: "CLOUDKIT_SYNC_ENABLED") {
+      return value.lowercased() == "true"
+    }
+    // Default to disabled until entitlements are configured
+    return false
+  }
+
   // MARK: - Google OAuth Credentials
 
   /// Google OAuth 2.0 Client ID

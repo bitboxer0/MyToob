@@ -24,11 +24,22 @@
 		<string>$(AppIdentifierPrefix)finley.MyToob</string>
 	</array>
 
-	<!-- CloudKit & App Groups: REMOVED (require paid Apple Developer account)
-	     Add these back when you enroll in Apple Developer Program:
-	     - com.apple.developer.icloud-container-identifiers
-	     - com.apple.developer.icloud-services
-	     - com.apple.security.application-groups
+	<!-- CloudKit Entitlements (Requires paid Apple Developer account)
+	     To enable CloudKit sync:
+	     1. Enroll in Apple Developer Program ($99/year)
+	     2. Register container "iCloud.finley.MyToob" in App Store Connect
+	     3. Uncomment the keys below
+	     4. Set CLOUDKIT_SYNC_ENABLED=true in environment (or remove override)
+	
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.finley.MyToob</string>
+	</array>
+
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
 	-->
 </dict>
 </plist>

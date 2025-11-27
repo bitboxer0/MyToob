@@ -62,6 +62,10 @@ final class LoggingService {
   /// Use for: sync operations, conflict resolution, CloudKit errors
   let sync: Logger
 
+  /// Logger for CloudKit container operations
+  /// Use for: account status, container access, record CRUD operations
+  let cloudKit: Logger
+
   /// Logger for user interface events
   /// Use for: view lifecycle, user interactions, navigation
   let ui: Logger
@@ -79,6 +83,7 @@ final class LoggingService {
     self.ai = Logger(subsystem: subsystem, category: "ai")
     self.player = Logger(subsystem: subsystem, category: "player")
     self.sync = Logger(subsystem: subsystem, category: "sync")
+    self.cloudKit = Logger(subsystem: subsystem, category: "cloudkit")
     self.ui = Logger(subsystem: subsystem, category: "ui")
     self.persistence = Logger(subsystem: subsystem, category: "persistence")
   }
