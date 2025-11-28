@@ -229,4 +229,44 @@ struct ChannelBlacklistTests {
     #expect(blacklist.shouldFilter(blockedVideo2) == true)
     #expect(blacklist.shouldFilter(allowedVideo) == false)
   }
+
+  // MARK: - Extension Tests
+
+  @Test("Display name with channelName set")
+  func displayNameWithName() async throws {
+    let entry = ChannelBlacklist(
+      channelID: "UC12345678901234567890",
+      channelName: "Test Channel"
+    )
+
+    #expect(entry.displayName == "Test Channel")
+  }
+
+  @Test("Display name without channelName (fallback)")
+  func displayNameFallback() async throws {
+    let entry = ChannelBlacklist(channelID: "UC12345678901234567890")
+
+    #expect(entry.displayName == "Channel UC123456")
+  }
+
+  @Test("Display name with empty channelName (fallback)")
+  func displayNameEmptyFallback() async throws {
+    let entry = ChannelBlacklist(
+      channelID: "UC12345678901234567890",
+      channelName: ""
+    )
+
+    #expect(entry.displayName == "Channel UC123456")
+  }
+
+  @Test("Formatted blocked date")
+  func formattedDate() async throws {
+    let entry = ChannelBlacklist(channelID: "UC12345")
+
+    // Should produce non-empty formatted string
+    let formatted = entry.formattedBlockedDate
+    #expect(!formatted.isEmpty)
+    // Should contain the year (basic sanity check)
+    #expect(formatted.contains("202"))
+  }
 }
