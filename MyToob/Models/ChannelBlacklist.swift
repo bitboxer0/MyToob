@@ -50,3 +50,24 @@ final class ChannelBlacklist {
     return itemChannelID == self.channelID
   }
 }
+
+// MARK: - UI Helper Extensions
+
+extension ChannelBlacklist {
+  /// Human-readable display name for UI
+  /// Falls back to a truncated channel ID if name is unavailable
+  var displayName: String {
+    if let name = channelName, !name.isEmpty {
+      return name
+    }
+    return "Channel \(String(channelID.prefix(8)))"
+  }
+
+  /// Formatted blocked date for display in management UI
+  var formattedBlockedDate: String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter.string(from: blockedAt)
+  }
+}

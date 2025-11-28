@@ -156,3 +156,23 @@ final class VideoItem {
     return min(watchProgress / duration, 1.0)
   }
 }
+
+// MARK: - Blacklist Helper Extensions
+
+extension VideoItem {
+  /// Check if this video belongs to a hidden channel
+  /// - Parameter hiddenChannelIDs: Set of channel IDs that are hidden
+  /// - Returns: `true` if this video's channel is in the hidden set, `false` otherwise
+  func isFromHiddenChannel(hiddenChannelIDs: Set<String>) -> Bool {
+    guard let channelID = self.channelID else { return false }
+    return hiddenChannelIDs.contains(channelID)
+  }
+
+  /// Check if this video belongs to a hidden channel
+  /// - Parameter blacklist: Array of `ChannelBlacklist` entries
+  /// - Returns: `true` if this video's channel is in the blacklist, `false` otherwise
+  func isFromHiddenChannel(blacklist: [ChannelBlacklist]) -> Bool {
+    guard let channelID = self.channelID else { return false }
+    return blacklist.contains { $0.channelID == channelID }
+  }
+}
