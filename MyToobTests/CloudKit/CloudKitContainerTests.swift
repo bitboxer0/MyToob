@@ -45,7 +45,8 @@ struct CloudKitContainerTests {
   // MARK: - Test Zone Configuration
 
   /// Dedicated zone for test isolation - keeps test data separate from user data.
-  private static let testZoneID = CKRecordZone.ID(zoneName: "MyToobTestsZone", ownerName: CKCurrentUserDefaultName)
+  private static let testZoneID = CKRecordZone.ID(
+    zoneName: "MyToobTestsZone", ownerName: CKCurrentUserDefaultName)
 
   // MARK: - Test Helpers
 
@@ -110,7 +111,8 @@ struct CloudKitContainerTests {
         return "Unknown iCloud account status (\(status.rawValue)) - skipping CloudKit tests"
       }
     } catch {
-      return "Failed to check iCloud account status: \(error.localizedDescription) - skipping CloudKit tests"
+      return
+        "Failed to check iCloud account status: \(error.localizedDescription) - skipping CloudKit tests"
     }
   }
 
@@ -132,6 +134,54 @@ struct CloudKitContainerTests {
 
     // Assert: Account should be available
     #expect(status == .available, "iCloud account should be available for CloudKit sync")
+  }
+
+  // MARK: - Test: User Record ID
+
+  @Test("CloudKit can fetch user record ID")
+  func testUserRecordID() async throws {
+    // Skip if CloudKit is not available
+    if let skipMessage = await checkCloudKitAvailability() {
+      withKnownIssue("CloudKit unavailable") {
+        Issue.record(Comment(rawValue: skipMessage))
+      }
+      return
+    }
+
+    // Act: Fetch user record ID via CloudKitService
+    let userRecordID = try await CloudKitService.shared.fetchUserRecordID()
+
+    // Assert: User record ID should exist
+    #expect(!userRecordID.recordName.isEmpty, "User record ID should not be empty")
+  }
+
+  // MARK: - Test: Health Check Round Trip
+
+  @Test("CloudKit health check measures round-trip latency")
+  func testHealthCheckRoundTrip() async throws {
+    // Skip if CloudKit is not available
+    if let skipMessage = await checkCloudKitAvailability() {
+      withKnownIssue("CloudKit unavailable") {
+        Issue.record(Comment(rawValue: skipMessage))
+      }
+      return
+    }
+
+    // Act: Perform health check via CloudKitService
+    let health = try await CloudKitService.shared.verifyHealth()
+
+    // Assert: Health check should indicate success with positive latency
+    #expect(health.canWrite, "Health check should indicate CloudKit is writable")
+    #expect(health.roundTripLatency > 0, "Round-trip latency should be positive")
+    #expect(
+      health.accountStatus == .available,
+      "Account status should be available")
+    #expect(
+      health.containerIdentifier == Configuration.cloudKitContainerIdentifier,
+      "Container identifier should match configuration")
+
+    // Log the latency for informational purposes
+    print("CloudKit health check latency: \(String(format: "%.2f", health.roundTripLatency * 1000))ms")
   }
 
   // MARK: - Test: Private Database CRUD
@@ -230,7 +280,7 @@ struct CloudKitContainerTests {
 
     // The container should be usable
     let context = ModelContext(modelContainer)
-    let descriptor = FetchDescriptor<VideoItemV2>()
+    let descriptor = FetchDescriptor<VideoItemV2>(sortBy: [])
     let results = try context.fetch(descriptor)
     #expect(results.isEmpty, "Fresh container should have no data")
   }

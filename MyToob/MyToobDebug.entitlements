@@ -22,13 +22,21 @@
 		<string>$(AppIdentifierPrefix)finley.MyToob</string>
 	</array>
 
-	<!-- CloudKit Entitlements (Requires paid Apple Developer account)
-	     To enable CloudKit sync:
-	     1. Enroll in Apple Developer Program ($99/year)
-	     2. Register container "iCloud.finley.MyToob" in App Store Connect
-	     3. Uncomment the keys below
-	     4. Remove CLOUDKIT_SYNC_ENABLED=false from environment
-	
+	<!-- CloudKit Entitlements
+	     =====================
+	     REQUIREMENTS:
+	     1. Paid Apple Developer Program enrollment ($99/year)
+	     2. CloudKit container "iCloud.finley.MyToob" registered in App Store Connect
+	     3. App ID configured with iCloud capability
+	     
+	     TO ENABLE:
+	     1. Uncomment the keys below
+	     2. Set CLOUDKIT_SYNC_ENABLED=true in environment (optional, already defaults to false)
+	     3. Build and run - CloudKit sync will be active
+	     
+	     Without paid enrollment, keep these commented to avoid provisioning errors.
+	-->
+	<!--
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.finley.MyToob</string>
