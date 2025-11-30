@@ -88,6 +88,28 @@ final class ComplianceLogger {
     )
   }
 
+  // MARK: - Content Policy Events
+
+  /// Source from which the content policy was loaded
+  enum PolicyAccessSource: String {
+    case external  // Loaded from hosted URL
+    case local  // Loaded from bundled HTML fallback
+  }
+
+  /// Log when the user views the content policy page
+  /// - Parameter source: Whether the policy was loaded from external URL or local bundle
+  func logContentPolicyAccessed(source: PolicyAccessSource) {
+    let timestamp = dateFormatter.string(from: Date())
+
+    logger.notice(
+      """
+      Content policy accessed: action=view_content_policy \\
+      source=\(source.rawValue, privacy: .public) \\
+      timestamp=\(timestamp, privacy: .public)
+      """
+    )
+  }
+
   // MARK: - Age Gate Events
 
   /// Log when age-gated content is encountered

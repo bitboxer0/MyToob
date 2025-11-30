@@ -71,5 +71,12 @@ struct MyToobApp: App {
     }
     .modelContainer(sharedModelContainer)
     .defaultSize(width: 1280, height: 800)
+
+    // Settings window (Cmd-,) with About section
+    // Required for App Store compliance - Content Policy visibility
+    Settings {
+      AboutView()
+        .accessibilityIdentifier("SettingsAboutView")
+    }
   }
 }
