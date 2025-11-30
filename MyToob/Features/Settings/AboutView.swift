@@ -48,7 +48,7 @@ struct AboutView: View {
     .accessibilityIdentifier("SettingsAboutView")
     .sheet(isPresented: $showContentPolicy) {
       PolicyWebView(
-        hostedURL: URL(string: "https://yourwebsite.com/mytoob/content-policy")!,
+        hostedURL: Configuration.contentPolicyURL,
         localHTMLResourceName: "ContentPolicy"
       )
       .frame(minWidth: 600, minHeight: 500)

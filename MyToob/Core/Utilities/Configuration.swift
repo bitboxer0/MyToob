@@ -39,6 +39,41 @@ enum Configuration {
     return false
   }
 
+  // MARK: - Content Policy & Company Information
+
+  /// Content Policy URL for hosted policy page
+  /// Read from MTContentPolicyURL in Info.plist
+  static var contentPolicyURL: URL {
+    guard
+      let value = Bundle.main.object(forInfoDictionaryKey: "MTContentPolicyURL") as? String,
+      let url = URL(string: value)
+    else {
+      LoggingService.shared.app.fault("Missing or invalid MTContentPolicyURL in Info.plist")
+      fatalError("Missing or invalid MTContentPolicyURL in Info.plist")
+    }
+    return url
+  }
+
+  /// Support email address
+  /// Read from MTSupportEmail in Info.plist
+  static var supportEmail: String {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: "MTSupportEmail") as? String else {
+      LoggingService.shared.app.fault("Missing MTSupportEmail in Info.plist")
+      fatalError("Missing MTSupportEmail in Info.plist")
+    }
+    return value
+  }
+
+  /// Company name for legal/copyright purposes
+  /// Read from MTCompanyName in Info.plist
+  static var companyName: String {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: "MTCompanyName") as? String else {
+      LoggingService.shared.app.fault("Missing MTCompanyName in Info.plist")
+      fatalError("Missing MTCompanyName in Info.plist")
+    }
+    return value
+  }
+
   // MARK: - Google OAuth Credentials
 
   /// Google OAuth 2.0 Client ID

@@ -9,12 +9,6 @@ import OSLog
 import SwiftUI
 import WebKit
 
-/// Source from which the content policy was loaded
-enum PolicyLoadSource: String {
-  case external  // Loaded from hosted URL
-  case local  // Loaded from bundled HTML fallback
-}
-
 /// View that displays the content policy page using WKWebView.
 /// First attempts to load from the hosted URL, falls back to bundled HTML on failure.
 /// Logs compliance events when the policy is successfully rendered.
@@ -24,7 +18,7 @@ struct PolicyWebView: View {
 
   @Environment(\.dismiss) private var dismiss
   @State private var pageTitle: String = "MyToob Content Policy"
-  @State private var loadSource: PolicyLoadSource? = nil
+  @State private var loadSource: ComplianceLogger.PolicyAccessSource? = nil
   @State private var isLoading: Bool = true
 
   var body: some View {
@@ -62,7 +56,7 @@ struct PolicyWebView: View {
       Divider()
 
       // Web content
-      WebViewRepresentable(
+      PolicyWKWebViewRepresentable(
         hostedURL: hostedURL,
         localHTMLResourceName: localHTMLResourceName,
         onTitleChange: { newTitle in
@@ -74,9 +68,7 @@ struct PolicyWebView: View {
           if loadSource != source {
             loadSource = source
             // Log compliance event when content is rendered
-            ComplianceLogger.shared.logContentPolicyAccessed(
-              source: source == .external ? .external : .local
-            )
+            ComplianceLogger.shared.logContentPolicyAccessed(source: source)
           }
           isLoading = false
         },
@@ -91,12 +83,12 @@ struct PolicyWebView: View {
 
 // MARK: - WebView NSViewRepresentable
 
-/// NSViewRepresentable wrapper for WKWebView on macOS
-struct WebViewRepresentable: NSViewRepresentable {
+/// NSViewRepresentable wrapper for WKWebView on macOS (Settings-specific)
+struct PolicyWKWebViewRepresentable: NSViewRepresentable {
   let hostedURL: URL
   let localHTMLResourceName: String
   let onTitleChange: (String) -> Void
-  let onLoadSourceResolved: (PolicyLoadSource) -> Void
+  let onLoadSourceResolved: (ComplianceLogger.PolicyAccessSource) -> Void
   let onLoadingChanged: (Bool) -> Void
 
   func makeNSView(context: Context) -> WKWebView {
@@ -125,9 +117,9 @@ struct WebViewRepresentable: NSViewRepresentable {
   // MARK: - Coordinator (WKNavigationDelegate)
 
   final class Coordinator: NSObject, WKNavigationDelegate {
-    let parent: WebViewRepresentable
+    let parent: PolicyWKWebViewRepresentable
 
-    init(_ parent: WebViewRepresentable) {
+    init(_ parent: PolicyWKWebViewRepresentable) {
       self.parent = parent
     }
 
@@ -148,9 +140,9 @@ struct WebViewRepresentable: NSViewRepresentable {
       loadLocalFallback(into: webView, error: error)
     }
 
-    /// Logger for policy web view operations
+    /// Logger for policy web view operations using dynamic bundle identifier
     private static let logger = Logger(
-      subsystem: "com.yourcompany.mytoob",
+      subsystem: Bundle.main.bundleIdentifier ?? "MyToob",
       category: "compliance"
     )
 
@@ -187,7 +179,7 @@ struct WebViewRepresentable: NSViewRepresentable {
 
 #Preview {
   PolicyWebView(
-    hostedURL: URL(string: "https://yourwebsite.com/mytoob/content-policy")!,
+    hostedURL: Configuration.contentPolicyURL,
     localHTMLResourceName: "ContentPolicy"
   )
   .frame(width: 600, height: 500)

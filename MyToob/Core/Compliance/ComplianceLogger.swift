@@ -22,7 +22,8 @@ final class ComplianceLogger {
   private let dateFormatter: ISO8601DateFormatter
 
   private init() {
-    self.logger = Logger(subsystem: "com.yourcompany.mytoob", category: "compliance")
+    let subsystem = Bundle.main.bundleIdentifier ?? "MyToob"
+    self.logger = Logger(subsystem: subsystem, category: "compliance")
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withInternetDateTime]
   }

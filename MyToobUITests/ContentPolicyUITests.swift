@@ -29,6 +29,46 @@ final class ContentPolicyUITests: XCTestCase {
     super.tearDown()
   }
 
+  // MARK: - Helper Methods
+
+  /// Opens the Settings window via keyboard shortcut and waits for the About view to appear
+  /// - Parameter timeout: Maximum time to wait for Settings to appear
+  /// - Returns: True if Settings opened successfully
+  @discardableResult
+  private func openSettingsAndWait(timeout: TimeInterval = 5) -> Bool {
+    app.typeKey(",", modifierFlags: .command)
+    let aboutView = app.otherElements.matching(identifier: "SettingsAboutView").firstMatch
+    return aboutView.waitForExistence(timeout: timeout)
+  }
+
+  /// Opens the Settings window and then opens the Content Policy sheet
+  /// - Returns: True if the policy sheet opened successfully
+  @discardableResult
+  private func openPolicyAndWait() -> Bool {
+    guard openSettingsAndWait() else {
+      return false
+    }
+
+    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
+    guard contentPolicyButton.waitForExistence(timeout: 5) else {
+      return false
+    }
+    contentPolicyButton.click()
+
+    let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
+    return policyWebView.waitForExistence(timeout: 10)
+  }
+
+  /// Waits for the Content Policy button to be ready for interaction
+  /// - Returns: The Content Policy button element, or nil if not found
+  private func waitForContentPolicyButton() -> XCUIElement? {
+    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
+    guard contentPolicyButton.waitForExistence(timeout: 5) else {
+      return nil
+    }
+    return contentPolicyButton
+  }
+
   // MARK: - Settings Window Tests
 
   func testSettingsWindowCanBeOpened() throws {
@@ -44,40 +84,29 @@ final class ContentPolicyUITests: XCTestCase {
   }
 
   func testSettingsWindowContainsAboutView() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-
-    // Wait for the About view to appear
-    let aboutView = app.otherElements.matching(identifier: "SettingsAboutView").firstMatch
-    if !aboutView.waitForExistence(timeout: 5) {
-      // Try alternative: check for window containing SettingsAboutView
-      let settingsWindow = app.windows.firstMatch
-      XCTAssertTrue(
-        settingsWindow.waitForExistence(timeout: 5),
-        "Settings window should appear"
-      )
-    }
+    // Open Settings and wait for About view
+    XCTAssertTrue(openSettingsAndWait(), "Settings should open")
 
     // Verify app name is displayed
     let appName = app.staticTexts["MyToob"]
-    XCTAssertTrue(appName.exists, "About view should display app name 'MyToob'")
+    XCTAssertTrue(
+      appName.waitForExistence(timeout: 5),
+      "About view should display app name 'MyToob'"
+    )
   }
 
   // MARK: - Content Policy Button Tests
 
   func testContentPolicyButtonExists() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-
-    // Wait for settings to load
-    sleep(1)
+    // Open Settings and wait
+    XCTAssertTrue(openSettingsAndWait(), "Settings should open")
 
     // Find Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(
-      contentPolicyButton.waitForExistence(timeout: 5),
-      "Content Policy button should exist in Settings"
-    )
+    guard let contentPolicyButton = waitForContentPolicyButton() else {
+      XCTFail("Content Policy button should exist in Settings")
+      return
+    }
+
     XCTAssertTrue(
       contentPolicyButton.isEnabled,
       "Content Policy button should be enabled"
@@ -85,15 +114,14 @@ final class ContentPolicyUITests: XCTestCase {
   }
 
   func testContentPolicyButtonAccessibility() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-
-    // Wait for settings to load
-    sleep(1)
+    // Open Settings and wait
+    XCTAssertTrue(openSettingsAndWait(), "Settings should open")
 
     // Find Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
+    guard let contentPolicyButton = waitForContentPolicyButton() else {
+      XCTFail("Content Policy button should exist")
+      return
+    }
 
     // Verify accessibility label
     XCTAssertEqual(
@@ -112,36 +140,19 @@ final class ContentPolicyUITests: XCTestCase {
   // MARK: - Policy Sheet Tests
 
   func testContentPolicySheetOpens() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
+    // Open Settings and click Content Policy button
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
-    // Wait for settings to load
-    sleep(1)
-
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
-
-    // Wait for policy sheet to appear
+    // Verify web view is present
     let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
-    XCTAssertTrue(
-      policyWebView.waitForExistence(timeout: 10),
-      "Content Policy web view should appear in sheet"
-    )
+    XCTAssertTrue(policyWebView.exists, "Content Policy web view should be visible")
   }
 
   func testContentPolicySheetHasTitle() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
+    // Open Content Policy sheet
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
-
-    // Wait for sheet to appear and check for title
+    // Wait for title to appear
     let policyTitle = app.staticTexts.matching(identifier: "ContentPolicyTitle").firstMatch
     XCTAssertTrue(
       policyTitle.waitForExistence(timeout: 10),
@@ -157,14 +168,8 @@ final class ContentPolicyUITests: XCTestCase {
   }
 
   func testContentPolicySheetShowsSourceLabel() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
-
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
+    // Open Content Policy sheet
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
     // Wait for source label to appear (indicates load completed)
     let sourceLabel = app.staticTexts.matching(identifier: "ContentPolicySourceLabel").firstMatch
@@ -183,42 +188,28 @@ final class ContentPolicyUITests: XCTestCase {
   }
 
   func testContentPolicySheetHasDoneButton() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
-
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
-
-    // Wait for sheet to appear
-    let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
-    XCTAssertTrue(policyWebView.waitForExistence(timeout: 10))
+    // Open Content Policy sheet
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
     // Verify Done button exists
     let doneButton = app.buttons["Done"]
-    XCTAssertTrue(doneButton.exists, "Policy sheet should have a Done button")
+    XCTAssertTrue(
+      doneButton.waitForExistence(timeout: 5),
+      "Policy sheet should have a Done button"
+    )
     XCTAssertTrue(doneButton.isEnabled, "Done button should be enabled")
   }
 
   func testContentPolicySheetCanBeDismissed() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
+    // Open Content Policy sheet
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
-
-    // Wait for sheet to appear
     let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
-    XCTAssertTrue(policyWebView.waitForExistence(timeout: 10))
+    XCTAssertTrue(policyWebView.exists, "Policy web view should be visible before dismiss")
 
     // Click Done button
     let doneButton = app.buttons["Done"]
-    XCTAssertTrue(doneButton.exists)
+    XCTAssertTrue(doneButton.waitForExistence(timeout: 5), "Done button should exist")
     doneButton.click()
 
     // Verify sheet is dismissed (web view should no longer exist)
@@ -228,8 +219,9 @@ final class ContentPolicyUITests: XCTestCase {
     )
 
     // Settings should still be visible
+    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
     XCTAssertTrue(
-      contentPolicyButton.exists,
+      contentPolicyButton.waitForExistence(timeout: 5),
       "Settings view should remain visible after dismissing policy sheet"
     )
   }
@@ -237,18 +229,8 @@ final class ContentPolicyUITests: XCTestCase {
   // MARK: - Content Presence Tests
 
   func testContentPolicyWebViewHasContent() throws {
-    // Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
-
-    // Click Content Policy button
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5))
-    contentPolicyButton.click()
-
-    // Wait for web view to load
-    let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
-    XCTAssertTrue(policyWebView.waitForExistence(timeout: 10))
+    // Open Content Policy sheet
+    XCTAssertTrue(openPolicyAndWait(), "Content Policy sheet should open")
 
     // Wait for source label to appear (indicates content loaded)
     let sourceLabel = app.staticTexts.matching(identifier: "ContentPolicySourceLabel").firstMatch
@@ -258,6 +240,7 @@ final class ContentPolicyUITests: XCTestCase {
     )
 
     // Web view should have some content (frame should have non-zero size)
+    let policyWebView = app.webViews.matching(identifier: "ContentPolicyWebView").firstMatch
     let frame = policyWebView.frame
     XCTAssertTrue(
       frame.width > 100 && frame.height > 100,
@@ -269,13 +252,14 @@ final class ContentPolicyUITests: XCTestCase {
 
   func testFullContentPolicyFlow() throws {
     // 1. Launch app (already done in setUp)
-    // 2. Open Settings
-    app.typeKey(",", modifierFlags: .command)
-    sleep(1)
+    // 2. Open Settings and wait
+    XCTAssertTrue(openSettingsAndWait(), "Settings should open")
 
-    // 3. Verify Settings opened
-    let contentPolicyButton = app.buttons.matching(identifier: "OpenContentPolicyButton").firstMatch
-    XCTAssertTrue(contentPolicyButton.waitForExistence(timeout: 5), "Settings should open")
+    // 3. Verify Content Policy button exists
+    guard let contentPolicyButton = waitForContentPolicyButton() else {
+      XCTFail("Content Policy button should exist")
+      return
+    }
 
     // 4. Open Content Policy
     contentPolicyButton.click()
@@ -289,7 +273,7 @@ final class ContentPolicyUITests: XCTestCase {
 
     // 6. Dismiss policy
     let doneButton = app.buttons["Done"]
-    XCTAssertTrue(doneButton.exists)
+    XCTAssertTrue(doneButton.waitForExistence(timeout: 5), "Done button should exist")
     doneButton.click()
 
     // 7. Verify returned to Settings
