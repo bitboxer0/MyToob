@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyToob Content Policy</title>
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #1d1d1f;
+      --secondary-color: #86868b;
+      --accent-color: #0066cc;
+      --border-color: #d2d2d7;
+      --section-bg: #f5f5f7;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #1d1d1f;
+        --text-color: #f5f5f7;
+        --secondary-color: #86868b;
+        --accent-color: #2997ff;
+        --border-color: #424245;
+        --section-bg: #2d2d2f;
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-color);
+      background-color: var(--bg-color);
+      padding: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 32px;
+      margin-bottom: 16px;
+      letter-spacing: -0.3px;
+    }
+    
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 12px;
+    }
+    
+    p {
+      margin-bottom: 16px;
+    }
+    
+    .last-updated {
+      color: var(--secondary-color);
+      font-size: 13px;
+      margin-bottom: 32px;
+    }
+    
+    .intro {
+      font-size: 17px;
+      color: var(--secondary-color);
+      margin-bottom: 32px;
+    }
+    
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+    
+    li {
+      margin-bottom: 8px;
+    }
+    
+    .section {
+      background-color: var(--section-bg);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    
+    .section h3 {
+      margin-top: 0;
+    }
+    
+    .warning {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 16px 20px;
+      margin: 24px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      .warning {
+        background-color: #3d3520;
+        border-left-color: #ffc107;
+      }
+    }
+    
+    a {
+      color: var(--accent-color);
+      text-decoration: none;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+    
+    .contact {
+      border-top: 1px solid var(--border-color);
+      margin-top: 40px;
+      padding-top: 24px;
+    }
+    
+    .footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-color);
+      font-size: 13px;
+      color: var(--secondary-color);
+    }
+  </style>
+</head>
+<body>
+  <h1>Content Policy</h1>
+  <p class="last-updated">Last Updated: November 30, 2025</p>
+  
+  <p class="intro">
+    MyToob is committed to providing a safe and respectful experience for all users.
+    This Content Policy outlines our guidelines for content displayed within the app
+    and the tools available to you for managing your viewing experience.
+  </p>
+  
+  <h2>YouTube Content</h2>
+  
+  <p>
+    MyToob displays videos from YouTube using the official YouTube IFrame Player API.
+    All YouTube content is subject to YouTube's own
+    <a href="https://www.youtube.com/t/community_guidelines" target="_blank">Community Guidelines</a>
+    and <a href="https://www.youtube.com/t/terms" target="_blank">Terms of Service</a>.
+  </p>
+  
+  <div class="section">
+    <h3>Reporting Inappropriate Content</h3>
+    <p>
+      If you encounter content on YouTube that violates YouTube's Community Guidelines,
+      you can report it directly to YouTube:
+    </p>
+    <ol>
+      <li>Right-click (or Control-click) on any video in MyToob</li>
+      <li>Select "Report Content" from the context menu</li>
+      <li>You'll be taken to YouTube's reporting page where you can submit your report</li>
+    </ol>
+    <p>
+      YouTube reviews all reports and takes appropriate action according to their policies.
+    </p>
+  </div>
+  
+  <div class="section">
+    <h3>Hiding Channels</h3>
+    <p>
+      You have control over which channels appear in your MyToob library:
+    </p>
+    <ol>
+      <li>Right-click (or Control-click) on any video from a channel you wish to hide</li>
+      <li>Select "Hide Channel" from the context menu</li>
+      <li>Optionally provide a reason (for your own records)</li>
+      <li>Confirm the action</li>
+    </ol>
+    <p>
+      Hidden channels can be managed from the sidebar under "YouTube" → "Manage Hidden Channels".
+      You can unhide channels at any time.
+    </p>
+  </div>
+  
+  <h2>Local Video Files</h2>
+  
+  <p>
+    MyToob allows you to import and organize local video files stored on your Mac.
+    You are solely responsible for ensuring that any local files you import comply
+    with applicable laws and do not infringe on others' rights.
+  </p>
+  
+  <div class="warning">
+    <strong>Important:</strong> MyToob does not download, cache, or store any YouTube
+    video or audio content. YouTube videos are streamed directly through the official
+    YouTube player. Only video metadata (titles, descriptions, thumbnails) is cached
+    locally to improve your experience.
+  </div>
+  
+  <h2>AI-Powered Features</h2>
+  
+  <p>
+    MyToob uses on-device AI to help organize and discover videos:
+  </p>
+  
+  <ul>
+    <li><strong>Video Recommendations:</strong> Based on your viewing history and preferences</li>
+    <li><strong>Topic Clustering:</strong> Automatically groups similar videos together</li>
+    <li><strong>Semantic Search:</strong> Find videos by describing what you're looking for</li>
+  </ul>
+  
+  <p>
+    All AI processing happens entirely on your device. No video content, viewing history,
+    or personal data is sent to external servers for AI analysis.
+  </p>
+  
+  <h2>Prohibited Uses</h2>
+  
+  <p>You agree not to use MyToob to:</p>
+  
+  <ul>
+    <li>Circumvent YouTube's content restrictions or access controls</li>
+    <li>Download, rip, or extract YouTube video or audio streams</li>
+    <li>Remove, disable, or bypass advertisements shown in YouTube videos</li>
+    <li>Scrape, harvest, or collect data from YouTube beyond normal viewing</li>
+    <li>Violate any applicable laws or third-party rights</li>
+  </ul>
+  
+  <h2>Changes to This Policy</h2>
+  
+  <p>
+    We may update this Content Policy from time to time. When we make significant changes,
+    we'll notify you through the app. Your continued use of MyToob after changes are posted
+    constitutes your acceptance of the updated policy.
+  </p>
+  
+  <div class="contact">
+    <h2>Contact Us</h2>
+    <p>
+      If you have questions about this Content Policy or need to report an issue not
+      covered by YouTube's reporting system, please contact us:
+    </p>
+    <p>
+      <strong>Email:</strong> <a href="mailto:support@mytoob.app">support@mytoob.app</a>
+    </p>
+  </div>
+  
+  <div class="footer">
+    <p>
+      MyToob is not affiliated with, endorsed by, or sponsored by YouTube or Google.
+      YouTube is a trademark of Google LLC.
+    </p>
+    <p>
+      &copy; 2025 MyToob LLC. All rights reserved.
+    </p>
+  </div>
+</body>
+</html>

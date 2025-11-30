@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>MTContentPolicyURL</key>
+	<string>https://mytoob.app/legal/content-policy</string>
+	<key>MTSupportEmail</key>
+	<string>support@mytoob.app</string>
+	<key>MTCompanyName</key>
+	<string>MyToob LLC</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

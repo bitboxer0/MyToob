@@ -22,7 +22,8 @@ final class ComplianceLogger {
   private let dateFormatter: ISO8601DateFormatter
 
   private init() {
-    self.logger = Logger(subsystem: "com.yourcompany.mytoob", category: "compliance")
+    let subsystem = Bundle.main.bundleIdentifier ?? "MyToob"
+    self.logger = Logger(subsystem: subsystem, category: "compliance")
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withInternetDateTime]
   }
@@ -83,6 +84,28 @@ final class ComplianceLogger {
       User reported content: action=report_content \
       videoID=\(videoID, privacy: .private) \
       reportType=\(reportType ?? "unspecified", privacy: .public) \
+      timestamp=\(timestamp, privacy: .public)
+      """
+    )
+  }
+
+  // MARK: - Content Policy Events
+
+  /// Source from which the content policy was loaded
+  enum PolicyAccessSource: String {
+    case external  // Loaded from hosted URL
+    case local  // Loaded from bundled HTML fallback
+  }
+
+  /// Log when the user views the content policy page
+  /// - Parameter source: Whether the policy was loaded from external URL or local bundle
+  func logContentPolicyAccessed(source: PolicyAccessSource) {
+    let timestamp = dateFormatter.string(from: Date())
+
+    logger.notice(
+      """
+      Content policy accessed: action=view_content_policy \\
+      source=\(source.rawValue, privacy: .public) \\
       timestamp=\(timestamp, privacy: .public)
       """
     )
