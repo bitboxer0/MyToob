@@ -74,9 +74,11 @@ struct MyToobApp: App {
 
     // Settings window (Cmd-,) with About section
     // Required for App Store compliance - Content Policy visibility
+    // Story 12.4: Support & Diagnostics requires access to ModelContainer for stats
     Settings {
       AboutView()
         .accessibilityIdentifier("SettingsAboutView")
     }
+    .modelContainer(sharedModelContainer)
   }
 }

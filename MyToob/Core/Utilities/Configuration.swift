@@ -64,6 +64,20 @@ enum Configuration {
     return value
   }
 
+  /// Support website URL for FAQ/help resources
+  /// Defaults to mytoob.app/support if not configured in Info.plist
+  static var supportWebsiteURL: URL {
+    if let value = Bundle.main.object(forInfoDictionaryKey: "MTSupportWebsiteURL") as? String,
+       let url = URL(string: value) {
+      return url
+    }
+    // swiftlint:disable:next force_unwrapping
+    return URL(string: "https://mytoob.app/support")!
+  }
+
+  /// Expected support response time for user communication
+  static let supportResponseTime = "24 hours"
+
   /// Company name for legal/copyright purposes
   /// Read from MTCompanyName in Info.plist
   static var companyName: String {
