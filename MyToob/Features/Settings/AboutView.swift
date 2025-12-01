@@ -79,6 +79,37 @@ struct AboutView: View {
           .accessibilityIdentifier("DiagnosticsPrivacyNote")
       }
 
+      Section("YouTube Attribution") {
+        Text("Not affiliated with or endorsed by YouTube or Google.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("AboutNotAffiliatedText")
+
+        Text(
+          "This app uses YouTube services via official APIs and is subject to YouTube's Terms of Service."
+        )
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("AboutYouTubeToSText")
+
+        Button {
+          if let url = URL(string: "https://www.youtube.com/t/terms") {
+            NSWorkspace.shared.open(url)
+          }
+        } label: {
+          HStack {
+            Label("YouTube Terms of Service", systemImage: "link")
+            Spacer()
+            Image(systemName: "arrow.up.forward")
+              .foregroundStyle(.secondary)
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("AboutToSLink")
+        .accessibilityLabel("YouTube Terms of Service")
+        .accessibilityHint("Opens YouTube's Terms of Service in your browser")
+      }
+
       Section("Legal & Policies") {
         Button {
           showContentPolicy = true
