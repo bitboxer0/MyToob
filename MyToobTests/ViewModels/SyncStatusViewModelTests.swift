@@ -26,6 +26,17 @@ import Testing
 @MainActor
 struct SyncStatusViewModelTests {
 
+  // MARK: - Test Setup/Teardown
+
+  init() {
+    // Reset shared settings before each test to ensure isolation
+    #if DEBUG
+      SyncSettingsStore.shared.resetForTesting()
+    #else
+      SyncSettingsStore.shared.setUserEnabled(false)
+    #endif
+  }
+
   // MARK: - Test Fixtures
 
   /// Mock CloudKit service for testing
@@ -277,7 +288,7 @@ struct SyncStatusViewModelTests {
   }
 
   @Test("Details are properly populated")
-  func testDetailsProperltyPopulated() async throws {
+  func testDetailsProperlyPopulated() async throws {
     // Given: Mock service
     let mockService = MockCloudKitService()
     mockService.accountStatus = .available

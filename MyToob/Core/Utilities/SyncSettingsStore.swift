@@ -112,4 +112,13 @@ final class SyncSettingsStore: ObservableObject {
     setUserEnabled(false)
     LoggingService.shared.sync.info("SyncSettingsStore reset to defaults")
   }
+
+  #if DEBUG
+    /// Resets the store for testing purposes.
+    /// This method ensures tests start with a clean state.
+    func resetForTesting() {
+      isUserEnabled = false
+      UserDefaults.standard.removeObject(forKey: defaultsKey)
+    }
+  #endif
 }

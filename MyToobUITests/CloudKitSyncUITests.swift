@@ -7,6 +7,37 @@
 
 import XCTest
 
+// MARK: - UI Test Helpers
+
+extension XCUIElement {
+  /// Waits for the element to exist and be hittable.
+  /// - Parameter timeout: Maximum time to wait
+  /// - Returns: `true` if element is hittable within timeout
+  func waitUntilHittable(timeout: TimeInterval = 3.0) -> Bool {
+    waitForExistence(timeout: timeout) && isHittable
+  }
+}
+
+extension XCTestCase {
+  /// Waits until a condition becomes true or times out.
+  /// - Parameters:
+  ///   - condition: A closure that returns `true` when the condition is met
+  ///   - timeout: Maximum time to wait
+  ///   - interval: Polling interval
+  func waitUntil(
+    _ condition: @escaping () -> Bool,
+    timeout: TimeInterval = 3.0,
+    interval: TimeInterval = 0.05
+  ) {
+    let end = Date().addingTimeInterval(timeout)
+    while Date() < end {
+      if condition() { return }
+      RunLoop.current.run(until: Date().addingTimeInterval(interval))
+    }
+    XCTFail("Timed out waiting for condition")
+  }
+}
+
 /// UI tests for CloudKit sync status indicator and settings.
 ///
 /// **Test Coverage:**
@@ -191,14 +222,10 @@ final class CloudKitSyncUITests: XCTestCase {
     if openSettingsButton.waitForExistence(timeout: 2) {
       openSettingsButton.click()
 
-      // 4. Verify Settings window opens
-      // Give it time to open
-      Thread.sleep(forTimeInterval: 1)
-
-      // Look for sync toggle to confirm we're in settings
+      // 4. Verify Settings window opens - use waitForExistence instead of Thread.sleep
       let syncToggle = app.toggles["CloudKitSyncToggle"]
       XCTAssertTrue(
-        syncToggle.waitForExistence(timeout: 3),
+        syncToggle.waitUntilHittable(timeout: 5),
         "Settings should open with sync toggle visible"
       )
 

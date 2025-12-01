@@ -29,10 +29,16 @@ struct SyncSettingsView: View {
     Form {
       // MARK: - Sync Toggle Section
       Section {
-        Toggle("Enable iCloud Sync", isOn: $viewModel.toggleOn)
-          .accessibilityIdentifier("CloudKitSyncToggle")
-          .disabled(!viewModel.details.isEntitlementAvailable)
-          .accessibilityHint(toggleHint)
+        Toggle(
+          "Enable iCloud Sync",
+          isOn: Binding(
+            get: { viewModel.toggleOn },
+            set: { viewModel.setSyncEnabled($0) }
+          )
+        )
+        .accessibilityIdentifier("CloudKitSyncToggle")
+        .disabled(!viewModel.details.isEntitlementAvailable)
+        .accessibilityHint(toggleHint)
 
         if !viewModel.details.isEntitlementAvailable {
           Label {
@@ -180,5 +186,5 @@ struct SyncSettingsView: View {
 
 #Preview {
   SyncSettingsView()
-    .environmentObject(SyncStatusViewModel())
+    .environmentObject(SyncStatusViewModel(settings: SyncSettingsStore.shared))
 }

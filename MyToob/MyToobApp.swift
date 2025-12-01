@@ -14,13 +14,17 @@ struct MyToobApp: App {
   /// User sync settings (observed for container rebuilding)
   @StateObject private var syncSettings = SyncSettingsStore.shared
 
-  /// Shared sync status ViewModel for UI binding
-  @StateObject private var syncViewModel = SyncStatusViewModel()
+  /// Shared sync status ViewModel for UI binding - explicitly injected with settings
+  @StateObject private var syncViewModel: SyncStatusViewModel
 
   /// Dynamic model container that responds to sync settings changes
   @State private var sharedModelContainer: ModelContainer
 
   init() {
+    // Initialize syncViewModel with explicit settings injection to ensure proper init ordering
+    _syncViewModel = StateObject(
+      wrappedValue: SyncStatusViewModel(settings: SyncSettingsStore.shared)
+    )
     // Log app launch with version info
     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
     let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
@@ -49,8 +53,14 @@ struct MyToobApp: App {
     }
     .modelContainer(sharedModelContainer)
     .defaultSize(width: 1280, height: 800)
-    .onChange(of: syncSettings.effectiveCloudKitEnabled) { _, newValue in
-      rebuildModelContainer(cloudKitEnabled: newValue)
+    .onChange(of: syncSettings.isUserEnabled) { _, _ in
+      // Observe the @Published property (not computed) for reliable change detection
+      let effectiveEnabled = syncSettings.effectiveCloudKitEnabled
+      rebuildModelContainer(cloudKitEnabled: effectiveEnabled)
+      // Trigger a status refresh when user changes preference
+      Task {
+        await syncViewModel.refreshStatus()
+      }
     }
 
     // Settings window (Cmd-,) with tabbed interface
@@ -140,4 +150,30 @@ struct MyToobApp: App {
 
     LoggingService.shared.persistence.info("ModelContainer rebuilt successfully")
   }
+
+  // MARK: - DEBUG Test Support
+
+  #if DEBUG
+    /// Container mode for testing - indicates whether CloudKit was requested
+    enum ContainerMode {
+      case localOnly
+      case cloudKit
+    }
+
+    /// DEBUG-only API to build a container and return its mode for testing.
+    ///
+    /// This allows tests to verify the container factory logic without needing
+    /// to introspect the ModelContainer's CloudKit configuration.
+    ///
+    /// - Parameter cloudKitEnabled: Whether to request CloudKit sync
+    /// - Returns: Tuple of container and the mode that was selected
+    @MainActor
+    static func buildModelContainerWithMode(
+      cloudKitEnabled: Bool
+    ) -> (container: ModelContainer, mode: ContainerMode) {
+      let container = buildModelContainer(cloudKitEnabled: cloudKitEnabled)
+      let mode: ContainerMode = cloudKitEnabled ? .cloudKit : .localOnly
+      return (container, mode)
+    }
+  #endif
 }

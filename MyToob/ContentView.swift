@@ -287,6 +287,6 @@ struct ContentView: View {
 
 #Preview {
   ContentView()
-    .environmentObject(SyncStatusViewModel())
+    .environmentObject(SyncStatusViewModel(settings: SyncSettingsStore.shared))
     .modelContainer(for: [VideoItem.self, ChannelBlacklist.self], inMemory: true)
 }

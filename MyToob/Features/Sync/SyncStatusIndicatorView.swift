@@ -178,7 +178,7 @@ struct SyncStatusPopoverView: View {
 
   private func statusRow(label: String, value: String, valueColor: Color = .primary) -> some View {
     HStack {
-      Text(label + ":")
+      Text("\(label):")
         .foregroundStyle(.secondary)
         .frame(width: 80, alignment: .leading)
       Text(value)
@@ -205,22 +205,43 @@ struct SyncStatusPopoverView: View {
   // MARK: - Actions
 
   private func openSettingsWindow() {
-    // On macOS, open the Settings window using NSApp
     #if os(macOS)
-    if #available(macOS 14.0, *) {
-      openSettings()
-    } else {
-      // Fallback for older macOS versions
-      NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-    }
+      SettingsNavigator.openSettings()
     #endif
   }
 }
+
+// MARK: - Settings Navigator
+
+#if os(macOS)
+  import AppKit
+
+  /// Encapsulates macOS Settings window navigation with availability-gated selectors.
+  ///
+  /// This enum centralizes the fragile selector-based Settings navigation,
+  /// making it easier to maintain and update if Apple changes the API.
+  enum SettingsNavigator {
+    /// Opens the app's Settings window.
+    ///
+    /// - Note: Uses availability-gated selectors. The underlying selectors are not
+    ///   part of Apple's public API and may change in future macOS versions.
+    static func openSettings() {
+      if #available(macOS 14.0, *) {
+        // macOS 14+ uses showSettingsWindow:
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+      } else {
+        // Older macOS versions use showPreferencesWindow:
+        // Note: This is a private selector and may break in future OS updates
+        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+      }
+    }
+  }
+#endif
 
 // MARK: - Preview
 
 #Preview("Synced State") {
   SyncStatusIndicatorView()
-    .environmentObject(SyncStatusViewModel())
+    .environmentObject(SyncStatusViewModel(settings: SyncSettingsStore.shared))
     .padding()
 }

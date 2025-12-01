@@ -137,14 +137,8 @@ final class SyncStatusViewModel: ObservableObject {
   @Published private(set) var details: SyncDetails = .default
 
   /// Binding for the sync toggle in UI.
-  /// Setting this updates the user preference via `setSyncEnabled(_:)`.
-  @Published var toggleOn: Bool = false {
-    didSet {
-      if oldValue != toggleOn {
-        setSyncEnabled(toggleOn)
-      }
-    }
-  }
+  /// Use `setSyncEnabled(_:)` to update from UI; do not set directly to avoid recursion.
+  @Published var toggleOn: Bool = false
 
   // MARK: - Dependencies
 
@@ -152,16 +146,25 @@ final class SyncStatusViewModel: ObservableObject {
   private let settings: SyncSettingsStore
   private var cancellables = Set<AnyCancellable>()
 
+  /// Guard flag to prevent recursion when updating toggle programmatically
+  private var isUpdatingFromSettings = false
+
+  /// Task handle for refresh operations to allow cancellation
+  private var refreshTask: Task<Void, Never>?
+
   // MARK: - Initialization
 
   /// Creates a SyncStatusViewModel with the specified dependencies.
   ///
   /// - Parameters:
   ///   - service: The CloudKit service for sync operations (default: CloudKitService.shared)
-  ///   - settings: The settings store for user preferences (default: SyncSettingsStore.shared)
+  ///   - settings: The settings store for user preferences (must be injected explicitly)
+  ///
+  /// - Note: `settings` parameter has no default to enforce explicit injection from `MyToobApp`,
+  ///   ensuring proper initialization ordering of the singleton.
   init(
     service: CloudKitSyncing = CloudKitService.shared,
-    settings: SyncSettingsStore = .shared
+    settings: SyncSettingsStore
   ) {
     self.service = service
     self.settings = settings
@@ -250,12 +253,27 @@ final class SyncStatusViewModel: ObservableObject {
   /// This method updates the settings store, which will trigger a container rebuild
   /// in the app. The state will be updated accordingly.
   ///
+  /// Call this from UI bindings instead of setting `toggleOn` directly.
+  ///
   /// - Parameter enabled: Whether the user wants sync enabled
   func setSyncEnabled(_ enabled: Bool) {
+    // Guard against recursion from programmatic updates
+    guard !isUpdatingFromSettings else { return }
+
     LoggingService.shared.sync.debug("Setting sync enabled: \(enabled, privacy: .public)")
 
     settings.setUserEnabled(enabled)
     // Note: handleSettingsChange will be called via the publisher
+  }
+
+  /// Updates the toggle to reflect settings changes without triggering setSyncEnabled.
+  ///
+  /// - Parameter value: The new toggle value from settings
+  private func updateToggle(fromSettings value: Bool) {
+    guard toggleOn != value else { return }
+    isUpdatingFromSettings = true
+    toggleOn = value
+    isUpdatingFromSettings = false
   }
 
   /// Triggers a manual sync operation.
@@ -288,16 +306,25 @@ final class SyncStatusViewModel: ObservableObject {
 
   // MARK: - Private Methods
 
+  /// Schedules a refresh operation, canceling any in-progress refresh.
+  ///
+  /// This prevents races from rapid toggling or multiple refresh triggers.
+  private func scheduleRefresh() {
+    refreshTask?.cancel()
+    refreshTask = Task { [weak self] in
+      guard let self else { return }
+      await self.refreshStatus()
+    }
+  }
+
   /// Handles changes to the user's sync preference.
   private func handleSettingsChange(isUserEnabled: Bool) {
     LoggingService.shared.sync.debug(
       "Settings changed - isUserEnabled: \(isUserEnabled, privacy: .public)"
     )
 
-    // Update toggle if it doesn't match (avoid infinite loop)
-    if toggleOn != isUserEnabled {
-      toggleOn = isUserEnabled
-    }
+    // Update toggle without triggering setSyncEnabled
+    updateToggle(fromSettings: isUserEnabled)
 
     // Update details
     updateDetailsFromSettings()
@@ -306,10 +333,8 @@ final class SyncStatusViewModel: ObservableObject {
     if !settings.effectiveCloudKitEnabled {
       state = .disabled
     } else if state == .disabled {
-      // Transition from disabled to checking
-      Task {
-        await refreshStatus()
-      }
+      // Transition from disabled to checking - use scheduled refresh
+      scheduleRefresh()
     }
   }
 
