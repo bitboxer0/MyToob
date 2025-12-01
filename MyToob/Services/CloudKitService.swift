@@ -36,6 +36,12 @@ final class CloudKitService: CloudKitSyncing {
   /// Shared CloudKitService instance
   static let shared = CloudKitService()
 
+  // MARK: - Constants
+
+  /// Maximum number of retry attempts for cascading conflicts.
+  /// This prevents infinite loops when concurrent writes keep causing conflicts.
+  private static let maxConflictRetryAttempts = 3
+
   // MARK: - Types
 
   /// Result of a CloudKit health check operation.
@@ -74,7 +80,29 @@ final class CloudKitService: CloudKitSyncing {
     }
   }
 
+  /// Result of a batch save operation with partial failure support.
+  struct BatchSaveResult {
+    /// Records that were successfully saved.
+    let savedRecords: [CKRecord]
+
+    /// Errors that occurred during saving, keyed by record ID.
+    let failedRecords: [CKRecord.ID: Error]
+
+    /// Number of conflicts that were resolved.
+    let conflictsResolved: Int
+
+    /// Record types that had conflicts.
+    let conflictRecordTypes: Set<String>
+
+    /// Whether all records were saved successfully.
+    var isComplete: Bool { failedRecords.isEmpty }
+  }
+
   // MARK: - Properties
+
+  /// Shared conflict resolver instance, reused by all save flows.
+  /// Stateless but reduces redundant allocations.
+  private let resolver = CloudKitConflictResolver()
 
   /// The CloudKit container for this app
   var container: CKContainer {
@@ -323,5 +351,307 @@ final class CloudKitService: CloudKitSyncing {
     try await privateDatabase.deleteRecord(withID: recordID)
     LoggingService.shared.cloudKit.debug(
       "Deleted record: \(recordID.recordName, privacy: .public)")
+  }
+
+  // MARK: - Conflict-Aware Record Operations
+
+  /// Saves a record with automatic conflict resolution.
+  ///
+  /// If a `serverRecordChanged` conflict occurs, this method:
+  /// 1. Resolves the conflict using Last-Write-Wins by timestamp
+  /// 2. For Note records, creates a "conflict copy" of the losing version
+  /// 3. Logs the resolution
+  /// 4. Optionally posts a notification for UI to display
+  ///
+  /// Includes retry logic with max attempts to handle cascading conflicts
+  /// (when saving the resolved record causes another conflict).
+  ///
+  /// - Parameters:
+  ///   - record: The record to save
+  ///   - notify: Whether to post a notification if conflicts are resolved (default: true)
+  /// - Returns: The saved (possibly conflict-resolved) record
+  /// - Throws: `CKError` if the save fails for non-conflict reasons or max retries exceeded
+  func saveRecordResolvingConflicts(_ record: CKRecord, notify: Bool = true) async throws
+    -> CKRecord
+  {
+    do {
+      return try await saveRecord(record)
+    } catch let error as CKError where error.code == .serverRecordChanged {
+      return try await resolveAndSaveConflict(error: error, notify: notify, attempt: 1)
+    }
+  }
+
+  /// Saves multiple records with automatic conflict resolution and partial failure handling.
+  ///
+  /// Records are saved individually with conflict resolution. Conflict copies
+  /// (e.g., Note conflict copies) are batched and saved together at the end
+  /// for efficiency. A single aggregated notification is posted if any
+  /// conflicts occurred.
+  ///
+  /// ## Partial Failure Handling
+  ///
+  /// If some records fail to save, this method continues with remaining records
+  /// and returns a `BatchSaveResult` containing both successes and failures.
+  /// Callers can inspect `failedRecords` to handle partial failures appropriately.
+  ///
+  /// - Parameters:
+  ///   - records: The records to save
+  ///   - notify: Whether to post a notification if conflicts are resolved (default: true)
+  /// - Returns: `BatchSaveResult` containing saved records, failed records, and conflict stats
+  func saveRecordsResolvingConflictsWithResult(_ records: [CKRecord], notify: Bool = true) async
+    -> BatchSaveResult
+  {
+    var savedRecords: [CKRecord] = []
+    var failedRecords: [CKRecord.ID: Error] = [:]
+    var conflictCount = 0
+    var conflictRecordTypes: Set<String> = []
+    var conflictRecordIDs: [String] = []
+    var pendingConflictCopies: [CKRecord] = []
+
+    for record in records {
+      do {
+        let saved = try await saveRecordWithRetry(
+          record,
+          resolver: resolver,
+          conflictCount: &conflictCount,
+          conflictRecordTypes: &conflictRecordTypes,
+          conflictRecordIDs: &conflictRecordIDs,
+          pendingConflictCopies: &pendingConflictCopies
+        )
+        savedRecords.append(saved)
+      } catch {
+        failedRecords[record.recordID] = error
+        LoggingService.shared.cloudKit.error(
+          "Failed to save record \(record.recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
+    }
+
+    // Batch save all conflict copies, accumulating failures
+    for copy in pendingConflictCopies {
+      do {
+        let savedCopy = try await saveRecord(copy)
+        savedRecords.append(savedCopy)
+        LoggingService.shared.cloudKit.debug(
+          "Saved conflict copy: \(savedCopy.recordID.recordName, privacy: .public)")
+      } catch {
+        failedRecords[copy.recordID] = error
+        LoggingService.shared.cloudKit.error(
+          "Failed to save conflict copy \(copy.recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
+    }
+
+    // Post aggregated notification if conflicts occurred
+    if notify && conflictCount > 0 {
+      postConflictNotification(
+        count: conflictCount,
+        recordTypes: Array(conflictRecordTypes),
+        recordIDs: conflictRecordIDs
+      )
+    }
+
+    return BatchSaveResult(
+      savedRecords: savedRecords,
+      failedRecords: failedRecords,
+      conflictsResolved: conflictCount,
+      conflictRecordTypes: conflictRecordTypes
+    )
+  }
+
+  /// Saves multiple records with automatic conflict resolution.
+  ///
+  /// This is a convenience wrapper around `saveRecordsResolvingConflictsWithResult`
+  /// that throws on any failure for simpler error handling when partial success
+  /// is not acceptable.
+  ///
+  /// - Parameters:
+  ///   - records: The records to save
+  ///   - notify: Whether to post a notification if conflicts are resolved (default: true)
+  /// - Returns: Array of saved records (includes conflict copies if any)
+  /// - Throws: First error encountered if any record fails to save
+  func saveRecordsResolvingConflicts(_ records: [CKRecord], notify: Bool = true) async throws
+    -> [CKRecord]
+  {
+    let result = await saveRecordsResolvingConflictsWithResult(records, notify: notify)
+
+    // If any records failed, throw the first error
+    if let firstFailure = result.failedRecords.first {
+      throw firstFailure.value
+    }
+
+    return result.savedRecords
+  }
+
+  // MARK: - Conflict Resolution Helpers
+
+  /// Saves a record with retry logic for cascading conflicts.
+  ///
+  /// - Parameters:
+  ///   - record: The record to save
+  ///   - resolver: The conflict resolver to use
+  ///   - conflictCount: Counter for conflicts resolved (mutated)
+  ///   - conflictRecordTypes: Set of record types with conflicts (mutated)
+  ///   - conflictRecordIDs: List of record IDs with conflicts (mutated)
+  ///   - pendingConflictCopies: Array of conflict copies to save later (mutated)
+  ///   - attempt: Current attempt number (for retry logic)
+  /// - Returns: The saved record
+  private func saveRecordWithRetry(
+    _ record: CKRecord,
+    resolver: CloudKitConflictResolver,
+    conflictCount: inout Int,
+    conflictRecordTypes: inout Set<String>,
+    conflictRecordIDs: inout [String],
+    pendingConflictCopies: inout [CKRecord],
+    attempt: Int = 1
+  ) async throws -> CKRecord {
+    do {
+      return try await saveRecord(record)
+    } catch let error as CKError where error.code == .serverRecordChanged {
+      guard attempt <= Self.maxConflictRetryAttempts else {
+        LoggingService.shared.cloudKit.error(
+          "Max conflict retry attempts (\(Self.maxConflictRetryAttempts, privacy: .public)) exceeded for record: \(record.recordID.recordName, privacy: .public)"
+        )
+        throw error
+      }
+
+      // Build resolution plan
+      let plan = try resolver.makeResolutionPlan(from: error)
+
+      // Log the resolution
+      LoggingService.shared.sync.notice(
+        "Resolved conflict (attempt \(attempt, privacy: .public)) for \(plan.affectedRecordType, privacy: .public), recordID: \(plan.resolvedRecordForOriginalID.recordID.recordName, privacy: .public), loser: \(plan.conflictLoserDescription, privacy: .public)"
+      )
+      LoggingService.shared.cloudKit.debug(
+        "Conflict detail: \(plan.description, privacy: .public)")
+
+      // Recursively try to save the resolved winner
+      let savedWinner = try await saveRecordWithRetry(
+        plan.resolvedRecordForOriginalID,
+        resolver: resolver,
+        conflictCount: &conflictCount,
+        conflictRecordTypes: &conflictRecordTypes,
+        conflictRecordIDs: &conflictRecordIDs,
+        pendingConflictCopies: &pendingConflictCopies,
+        attempt: attempt + 1
+      )
+
+      LoggingService.shared.cloudKit.debug(
+        "Saved conflict winner: \(savedWinner.recordID.recordName, privacy: .public)")
+
+      // Collect conflict copies for batched save
+      pendingConflictCopies.append(contentsOf: plan.additionalRecordsToCreate)
+
+      conflictCount += 1
+      conflictRecordTypes.insert(record.recordType)
+      conflictRecordIDs.append(record.recordID.recordName)
+
+      return savedWinner
+    }
+  }
+
+  /// Resolves a conflict error and saves the resolved record with retry logic.
+  ///
+  /// - Parameters:
+  ///   - error: The `serverRecordChanged` error to resolve
+  ///   - notify: Whether to post a notification
+  ///   - attempt: Current attempt number (for retry logic)
+  /// - Returns: The saved resolved record
+  private func resolveAndSaveConflict(
+    error: CKError,
+    notify: Bool,
+    attempt: Int
+  ) async throws -> CKRecord {
+    guard attempt <= Self.maxConflictRetryAttempts else {
+      LoggingService.shared.cloudKit.error(
+        "Max conflict retry attempts (\(Self.maxConflictRetryAttempts, privacy: .public)) exceeded"
+      )
+      throw error
+    }
+
+    let plan = try resolver.makeResolutionPlan(from: error)
+
+    // Log the resolution
+    LoggingService.shared.sync.notice(
+      "Resolved conflict (attempt \(attempt, privacy: .public)) for \(plan.affectedRecordType, privacy: .public), recordID: \(plan.resolvedRecordForOriginalID.recordID.recordName, privacy: .public), loser: \(plan.conflictLoserDescription, privacy: .public)"
+    )
+    LoggingService.shared.cloudKit.debug(
+      "Conflict detail: \(plan.description, privacy: .public)")
+
+    // Save the resolved record with retry for cascading conflicts
+    let savedWinner: CKRecord
+    do {
+      savedWinner = try await saveRecord(plan.resolvedRecordForOriginalID)
+    } catch let cascadingError as CKError where cascadingError.code == .serverRecordChanged {
+      // Cascading conflict - retry with incremented attempt counter
+      return try await resolveAndSaveConflict(
+        error: cascadingError,
+        notify: notify,
+        attempt: attempt + 1
+      )
+    }
+
+    LoggingService.shared.cloudKit.debug(
+      "Saved conflict winner: \(savedWinner.recordID.recordName, privacy: .public)")
+
+    // Save any additional records (e.g., Note conflict copies)
+    // Don't throw after winner is saved - aligns with batch behavior (partial success)
+    for copy in plan.additionalRecordsToCreate {
+      do {
+        let savedCopy = try await saveRecord(copy)
+        LoggingService.shared.cloudKit.debug(
+          "Saved conflict copy: \(savedCopy.recordID.recordName, privacy: .public)")
+      } catch {
+        LoggingService.shared.cloudKit.error(
+          "Failed to save conflict copy \(copy.recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+        // Intentionally not throwing — winner already saved
+      }
+    }
+
+    // Post notification if requested
+    if notify {
+      postConflictNotification(
+        count: 1,
+        recordTypes: [plan.affectedRecordType],
+        recordIDs: [plan.resolvedRecordForOriginalID.recordID.recordName]
+      )
+    }
+
+    return savedWinner
+  }
+
+  /// Posts a notification about resolved conflicts on the main thread.
+  ///
+  /// This method is guaranteed to post on the main thread because:
+  /// 1. `CloudKitService` is marked `@MainActor`
+  /// 2. A dispatch precondition verifies main thread execution at runtime (including release builds)
+  ///
+  /// - Parameters:
+  ///   - count: Number of conflicts resolved
+  ///   - recordTypes: Types of records that had conflicts
+  ///   - recordIDs: Record names that had conflicts
+  private func postConflictNotification(
+    count: Int,
+    recordTypes: [String],
+    recordIDs: [String]
+  ) {
+    // Verify we're on the main thread (should always be true due to @MainActor)
+    // Use dispatchPrecondition for release-build safety instead of assert
+    dispatchPrecondition(condition: .onQueue(.main))
+
+    NotificationCenter.default.post(
+      name: .cloudKitSyncConflictsResolved,
+      object: nil,
+      userInfo: [
+        CloudKitSyncNotificationKey.count: count,
+        CloudKitSyncNotificationKey.recordTypes: recordTypes,
+        CloudKitSyncNotificationKey.recordIDs: recordIDs,
+      ]
+    )
+
+    LoggingService.shared.sync.info(
+      "Posted conflict notification: \(count, privacy: .public) conflict(s) in \(recordTypes, privacy: .public)"
+    )
   }
 }

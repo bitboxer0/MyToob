@@ -108,9 +108,24 @@ struct ContentView: View {
             .accessibilityHint("Opens consent screen to authorize YouTube access")
           }
         } header: {
-          Text("YouTube")
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("YouTubeSection")
+          HStack(spacing: 6) {
+            // YouTube logo - uses official asset when available, SF Symbol fallback
+            if let _ = NSImage(named: "YouTube/Logo") {
+              Image("YouTube/Logo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 14)
+                .accessibilityIdentifier("YouTubeSidebarLogo")
+            } else {
+              // Fallback: SF Symbol when official logo not available
+              Image(systemName: "play.rectangle.fill")
+                .foregroundStyle(.red)
+                .accessibilityIdentifier("YouTubeSidebarLogo")
+            }
+            Text("YouTube")
+          }
+          .accessibilityAddTraits(.isHeader)
+          .accessibilityIdentifier("YouTubeSection")
         }
 
         Section {
