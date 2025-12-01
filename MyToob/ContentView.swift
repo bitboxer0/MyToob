@@ -12,6 +12,7 @@ import SwiftUI
 /// Will be replaced with full YouTube + local file UI in later stories (Epic F)
 struct ContentView: View {
   @Environment(\.modelContext) private var modelContext
+  @EnvironmentObject var syncViewModel: SyncStatusViewModel
   @Query private var videoItems: [VideoItem]
   @Query private var hiddenChannels: [ChannelBlacklist]
 
@@ -199,6 +200,12 @@ struct ContentView: View {
           .foregroundStyle(.tertiary)
       }
     }
+    .toolbar {
+      ToolbarItem(placement: .automatic) {
+        SyncStatusIndicatorView()
+          .environmentObject(syncViewModel)
+      }
+    }
     .alert("Import Error", isPresented: $showImportError, presenting: importError) { _ in
       Button("OK") {}
     } message: { error in
@@ -295,5 +302,6 @@ struct ContentView: View {
 
 #Preview {
   ContentView()
+    .environmentObject(SyncStatusViewModel(settings: SyncSettingsStore.shared))
     .modelContainer(for: [VideoItem.self, ChannelBlacklist.self], inMemory: true)
 }

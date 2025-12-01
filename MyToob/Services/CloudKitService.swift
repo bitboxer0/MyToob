@@ -16,6 +16,7 @@ import OSLog
 /// - Accessing the private CloudKit database
 /// - Verifying CloudKit container accessibility
 /// - Health check with round-trip latency measurement
+/// - Manual sync trigger via `syncNow()`
 ///
 /// Usage:
 /// ```swift
@@ -28,7 +29,7 @@ import OSLog
 /// }
 /// ```
 @MainActor
-final class CloudKitService {
+final class CloudKitService: CloudKitSyncing {
 
   // MARK: - Singleton
 
@@ -122,9 +123,10 @@ final class CloudKitService {
   private(set) var accountStatusError: Error?
 
   /// Whether CloudKit is available for sync operations.
-  /// Returns true only if account status is `.available` and sync is enabled.
+  /// Returns true only if account status is `.available` and sync is effectively enabled
+  /// (both entitlement gate and user preference).
   var isCloudKitAvailable: Bool {
-    accountStatus == .available && Configuration.cloudKitSyncEnabled
+    accountStatus == .available && SyncSettingsStore.shared.effectiveCloudKitEnabled
   }
 
   // MARK: - Initialization
@@ -184,7 +186,8 @@ final class CloudKitService {
   /// - Returns: `true` if the container is accessible, `false` otherwise
   /// - Note: This performs a lightweight zone fetch to verify connectivity
   func verifyContainerAccess() async -> Bool {
-    guard Configuration.cloudKitSyncEnabled else {
+    // Gate by effective enablement (both entitlement and user preference)
+    guard SyncSettingsStore.shared.effectiveCloudKitEnabled else {
       LoggingService.shared.cloudKit.debug("CloudKit sync disabled - skipping container verification")
       return false
     }
@@ -198,6 +201,36 @@ final class CloudKitService {
       LoggingService.shared.cloudKit.error(
         "CloudKit container access verification failed: \(error.localizedDescription, privacy: .public)"
       )
+      return false
+    }
+  }
+
+  // MARK: - Sync Operations
+
+  /// Triggers a manual sync operation.
+  ///
+  /// This method performs a lightweight CloudKit operation to verify connectivity
+  /// and prompt SwiftData/CloudKit synchronization. It fetches all record zones
+  /// as a sync "tickle."
+  ///
+  /// - Returns: `true` if the sync operation completed successfully, `false` otherwise
+  func syncNow() async -> Bool {
+    // Gate by effective enablement
+    guard SyncSettingsStore.shared.effectiveCloudKitEnabled else {
+      LoggingService.shared.cloudKit.debug("Sync disabled - syncNow skipped")
+      return false
+    }
+
+    LoggingService.shared.sync.info("Manual sync triggered")
+
+    do {
+      // Perform a lightweight operation to tickle CloudKit/SwiftData sync
+      _ = try await privateDatabase.allRecordZones()
+      LoggingService.shared.cloudKit.info("Sync Now completed (zones fetched)")
+      return true
+    } catch {
+      LoggingService.shared.cloudKit.error(
+        "Sync Now failed: \(error.localizedDescription, privacy: .public)")
       return false
     }
   }
