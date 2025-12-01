@@ -11,21 +11,87 @@ import SwiftUI
 
 @main
 struct MyToobApp: App {
+  /// User sync settings (observed for container rebuilding)
+  @StateObject private var syncSettings = SyncSettingsStore.shared
+
+  /// Shared sync status ViewModel for UI binding
+  @StateObject private var syncViewModel = SyncStatusViewModel()
+
+  /// Dynamic model container that responds to sync settings changes
+  @State private var sharedModelContainer: ModelContainer
+
   init() {
     // Log app launch with version info
     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
     let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
     LoggingService.shared.app.info(
       "MyToob launched - Version: \(appVersion, privacy: .public) (\(buildNumber, privacy: .public))")
+
+    // Initialize container based on current effective enablement
+    let initialContainer = Self.buildModelContainer(
+      cloudKitEnabled: SyncSettingsStore.shared.effectiveCloudKitEnabled
+    )
+    _sharedModelContainer = State(initialValue: initialContainer)
   }
 
-  var sharedModelContainer: ModelContainer = {
+  var body: some Scene {
+    WindowGroup {
+      ContentView()
+        .environmentObject(syncViewModel)
+        .frame(minWidth: 1024, minHeight: 768)
+        .onAppear {
+          LoggingService.shared.app.debug("Main window created")
+          // Refresh sync status on app appear
+          Task {
+            await syncViewModel.refreshStatus()
+          }
+        }
+    }
+    .modelContainer(sharedModelContainer)
+    .defaultSize(width: 1280, height: 800)
+    .onChange(of: syncSettings.effectiveCloudKitEnabled) { _, newValue in
+      rebuildModelContainer(cloudKitEnabled: newValue)
+    }
+
+    // Settings window (Cmd-,) with tabbed interface
+    Settings {
+      TabView {
+        // iCloud Sync tab
+        SyncSettingsView()
+          .environmentObject(syncViewModel)
+          .tabItem {
+            Label("iCloud Sync", systemImage: "icloud")
+          }
+          .tag("sync")
+          .accessibilityIdentifier("SettingsSyncTab")
+
+        // About tab (Content Policy, etc.)
+        AboutView()
+          .tabItem {
+            Label("About", systemImage: "info.circle")
+          }
+          .tag("about")
+          .accessibilityIdentifier("SettingsAboutTab")
+      }
+      .frame(width: 500, height: 400)
+      .accessibilityIdentifier("SettingsWindow")
+    }
+  }
+
+  // MARK: - Model Container Management
+
+  /// Builds a ModelContainer with the specified CloudKit configuration.
+  ///
+  /// - Parameter cloudKitEnabled: Whether to enable CloudKit sync
+  /// - Returns: A configured ModelContainer
+  @MainActor
+  private static func buildModelContainer(cloudKitEnabled: Bool) -> ModelContainer {
     // Use versioned schema with migration plan for safe schema upgrades
     let schema = Schema(versionedSchema: SchemaV2.self)
 
     // Configure CloudKit sync if enabled
     let modelConfiguration: ModelConfiguration
-    if Configuration.cloudKitSyncEnabled {
+    if cloudKitEnabled {
       // CloudKit-enabled configuration with private database
       modelConfiguration = ModelConfiguration(
         schema: schema,
@@ -33,7 +99,7 @@ struct MyToobApp: App {
         cloudKitDatabase: .private(Configuration.cloudKitContainerIdentifier)
       )
       LoggingService.shared.cloudKit.info(
-        "CloudKit sync enabled with container: \(Configuration.cloudKitContainerIdentifier, privacy: .public)"
+        "Building ModelContainer with CloudKit: \(Configuration.cloudKitContainerIdentifier, privacy: .public)"
       )
     } else {
       // Local-only configuration (no CloudKit sync)
@@ -41,7 +107,7 @@ struct MyToobApp: App {
         schema: schema,
         isStoredInMemoryOnly: false
       )
-      LoggingService.shared.cloudKit.info("CloudKit sync disabled - using local storage only")
+      LoggingService.shared.cloudKit.info("Building ModelContainer with local-only storage")
     }
 
     do {
@@ -59,24 +125,19 @@ struct MyToobApp: App {
         "Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
       fatalError("Could not create ModelContainer: \(error)")
     }
-  }()
+  }
 
-  var body: some Scene {
-    WindowGroup {
-      ContentView()
-        .frame(minWidth: 1024, minHeight: 768)
-        .onAppear {
-          LoggingService.shared.app.debug("Main window created")
-        }
-    }
-    .modelContainer(sharedModelContainer)
-    .defaultSize(width: 1280, height: 800)
+  /// Rebuilds the ModelContainer when sync settings change.
+  ///
+  /// - Parameter cloudKitEnabled: Whether CloudKit sync should be enabled
+  @MainActor
+  private func rebuildModelContainer(cloudKitEnabled: Bool) {
+    LoggingService.shared.persistence.notice(
+      "Rebuilding ModelContainer - CloudKit enabled: \(cloudKitEnabled, privacy: .public)"
+    )
 
-    // Settings window (Cmd-,) with About section
-    // Required for App Store compliance - Content Policy visibility
-    Settings {
-      AboutView()
-        .accessibilityIdentifier("SettingsAboutView")
-    }
+    sharedModelContainer = Self.buildModelContainer(cloudKitEnabled: cloudKitEnabled)
+
+    LoggingService.shared.persistence.info("ModelContainer rebuilt successfully")
   }
 }
