@@ -30,6 +30,12 @@ struct ContentView: View {
   @State private var hideChannelError: Error?
   @State private var showHideChannelError = false
 
+  // Compliance export state (developer-only)
+  @State private var exportError: Error?
+  @State private var showExportError = false
+  @State private var showExportSuccess = false
+  @State private var exportedURL: URL?
+
   // MARK: - Computed Properties
 
   /// Filtered video items excluding hidden channels
@@ -144,6 +150,72 @@ struct ContentView: View {
             .accessibilityIdentifier("LocalFilesSection")
         }
 
+        // About & Support
+        Section {
+          Button {
+            if let url = AppConfig.contentPolicyURL {
+              NSWorkspace.shared.open(url)
+              ComplianceLogger.shared.logContentPolicyAccess(context: "sidebar")
+            } else {
+              #if DEBUG
+                print("Warning: MTContentPolicyURL not configured in Info.plist")
+              #endif
+            }
+          } label: {
+            Label("Content Policy", systemImage: "doc.text.magnifyingglass")
+          }
+          .disabled(AppConfig.contentPolicyURL == nil)
+          .accessibilityIdentifier("ContentPolicyLink")
+          .accessibilityLabel("Open Content Policy")
+
+          Button {
+            // Prefer email as default support method
+            if let email = AppConfig.supportEmail,
+              let url = URL(string: "mailto:\(email)?subject=MyToob%20Support")
+            {
+              NSWorkspace.shared.open(url)
+              ComplianceLogger.shared.logSupportContact(method: "email")
+            } else if let url = AppConfig.supportWebURL {
+              NSWorkspace.shared.open(url)
+              ComplianceLogger.shared.logSupportContact(method: "web")
+            } else {
+              #if DEBUG
+                print("Warning: MTSupportEmail/MTSupportWebURL not configured in Info.plist")
+              #endif
+            }
+          } label: {
+            Label("Contact Support", systemImage: "envelope")
+          }
+          .disabled(AppConfig.supportEmail == nil && AppConfig.supportWebURL == nil)
+          .accessibilityIdentifier("ContactSupportLink")
+          .accessibilityLabel("Contact Support")
+        } header: {
+          Text("About & Support")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("AboutSupportSection")
+        }
+
+        #if DEBUG
+          // Developer-only tools (hidden from release builds)
+          Section("Developer Tools") {
+            Button {
+              do {
+                let url = try ComplianceLogger.shared.exportComplianceLogs(sinceDays: 90)
+                exportedURL = url
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+                showExportSuccess = true
+              } catch {
+                exportError = error
+                showExportError = true
+              }
+            } label: {
+              Label("Export Compliance Logs", systemImage: "square.and.arrow.up")
+            }
+            .accessibilityIdentifier("ExportComplianceLogs")
+            .accessibilityLabel("Export Compliance Logs (Developer)")
+          }
+        #endif
+
         if !visibleVideoItems.isEmpty {
           Section("Library (\(visibleVideoItems.count) items)") {
             ForEach(visibleVideoItems, id: \.identifier) { item in
@@ -226,6 +298,16 @@ struct ContentView: View {
     }
     .sheet(isPresented: $showSubscriptionsImport) {
       SubscriptionsImportView(modelContext: modelContext)
+    }
+    .alert("Export Complete", isPresented: $showExportSuccess) {
+      Button("OK") {}
+    } message: {
+      Text("Compliance logs were exported to a JSON file.")
+    }
+    .alert("Export Error", isPresented: $showExportError, presenting: exportError) { _ in
+      Button("OK") {}
+    } message: { error in
+      Text(error.localizedDescription)
     }
   }
 
