@@ -31,6 +31,10 @@ struct ContentView: View {
   @State private var hideChannelError: Error?
   @State private var showHideChannelError = false
 
+  // Report content state
+  @State private var showReportContentDialog = false
+  @State private var videoToReport: String? = nil
+
   // Compliance export state (developer-only)
   @State private var exportError: Error?
   @State private var showExportError = false
@@ -62,215 +66,37 @@ struct ContentView: View {
   }
 
   var body: some View {
+    mainContent
+      .modifier(ContentViewAlerts(
+        showImportError: $showImportError,
+        importError: importError,
+        showHideChannelDialog: $showHideChannelDialog,
+        hideChannelReason: $hideChannelReason,
+        channelDisplayName: channelDisplayName,
+        performHideChannel: performHideChannel,
+        resetHideChannelState: resetHideChannelState,
+        showHideChannelError: $showHideChannelError,
+        hideChannelError: hideChannelError,
+        showReportContentDialog: $showReportContentDialog,
+        performReportContent: performReportContent,
+        clearVideoToReport: { videoToReport = nil },
+        showOAuthConsent: $showOAuthConsent,
+        showSubscriptionsImport: $showSubscriptionsImport,
+        modelContext: modelContext,
+        showExportSuccess: $showExportSuccess,
+        showExportError: $showExportError,
+        exportError: exportError
+      ))
+  }
+
+  // MARK: - Main Content
+
+  @ViewBuilder
+  private var mainContent: some View {
     NavigationSplitView {
-      List {
-        Section {
-          Label("All Videos", systemImage: "play.rectangle.on.rectangle")
-          Label("Recently Watched", systemImage: "clock")
-          Label("Favorites", systemImage: "star")
-        } header: {
-          Text("Collections")
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("CollectionsSection")
-        }
-
-        Section {
-          if oauth.isAuthenticated {
-            Label("Subscriptions", systemImage: "person.2")
-            Label("Playlists", systemImage: "list.bullet")
-
-            Button {
-              showSubscriptionsImport = true
-            } label: {
-              Label("Import Subscriptions", systemImage: "arrow.down.circle")
-            }
-            .accessibilityLabel("Import Subscriptions")
-            .accessibilityHint("Opens dialog to import YouTube subscriptions")
-
-            NavigationLink {
-              HiddenChannelsView()
-            } label: {
-              Label("Manage Hidden Channels", systemImage: "eye.slash.fill")
-            }
-            .accessibilityIdentifier("ManageHiddenChannels")
-            .accessibilityLabel("Manage Hidden Channels")
-            .accessibilityHint("View and unhide blocked YouTube channels")
-
-            Button {
-              Task {
-                try? oauth.signOut()
-              }
-            } label: {
-              Label("Sign Out", systemImage: "person.crop.circle.badge.xmark")
-            }
-            .foregroundStyle(.red)
-          } else {
-            Button {
-              showOAuthConsent = true
-            } label: {
-              Label("Connect YouTube Account", systemImage: "person.crop.circle.badge.plus")
-            }
-            .accessibilityLabel("Connect YouTube Account")
-            .accessibilityHint("Opens consent screen to authorize YouTube access")
-          }
-        } header: {
-          HStack(spacing: 6) {
-            // YouTube logo - uses official asset when available, SF Symbol fallback
-            if let _ = NSImage(named: "YouTube/Logo") {
-              Image("YouTube/Logo")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 14)
-                .accessibilityIdentifier("YouTubeSidebarLogo")
-            } else {
-              // Fallback: SF Symbol when official logo not available
-              Image(systemName: "play.rectangle.fill")
-                .foregroundStyle(.red)
-                .accessibilityIdentifier("YouTubeSidebarLogo")
-            }
-            Text("YouTube")
-          }
-          .accessibilityAddTraits(.isHeader)
-          .accessibilityIdentifier("YouTubeSection")
-        }
-
-        Section {
-          Label("All Local Videos", systemImage: "folder")
-            .accessibilityIdentifier("AllLocalVideos")
-
-          Button(action: importLocalFiles) {
-            Label("Import Local Files", systemImage: "plus.circle")
-          }
-          .disabled(isImporting)
-          .accessibilityLabel("Import Local Files")
-          .accessibilityIdentifier("ImportLocalFilesButton")
-          .accessibilityHint("Opens file picker to select video files to import")
-        } header: {
-          Text("Local Files")
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("LocalFilesSection")
-        }
-
-        // About & Support
-        Section {
-          Button {
-            if let url = AppConfig.contentPolicyURL {
-              NSWorkspace.shared.open(url)
-              ComplianceLogger.shared.logContentPolicyAccess(context: "sidebar")
-            } else {
-              #if DEBUG
-                print("Warning: MTContentPolicyURL not configured in Info.plist")
-              #endif
-            }
-          } label: {
-            Label("Content Policy", systemImage: "doc.text.magnifyingglass")
-          }
-          .disabled(AppConfig.contentPolicyURL == nil)
-          .accessibilityIdentifier("ContentPolicyLink")
-          .accessibilityLabel("Open Content Policy")
-
-          Button {
-            // Prefer email as default support method
-            if let email = AppConfig.supportEmail,
-              let url = URL(string: "mailto:\(email)?subject=MyToob%20Support")
-            {
-              NSWorkspace.shared.open(url)
-              ComplianceLogger.shared.logSupportContact(method: "email")
-            } else if let url = AppConfig.supportWebURL {
-              NSWorkspace.shared.open(url)
-              ComplianceLogger.shared.logSupportContact(method: "web")
-            } else {
-              #if DEBUG
-                print("Warning: MTSupportEmail/MTSupportWebURL not configured in Info.plist")
-              #endif
-            }
-          } label: {
-            Label("Contact Support", systemImage: "envelope")
-          }
-          .disabled(AppConfig.supportEmail == nil && AppConfig.supportWebURL == nil)
-          .accessibilityIdentifier("ContactSupportLink")
-          .accessibilityLabel("Contact Support")
-        } header: {
-          Text("About & Support")
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("AboutSupportSection")
-        }
-
-        #if DEBUG
-          // Developer-only tools (hidden from release builds)
-          Section("Developer Tools") {
-            Button {
-              do {
-                let url = try ComplianceLogger.shared.exportComplianceLogs(sinceDays: 90)
-                exportedURL = url
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-                showExportSuccess = true
-              } catch {
-                exportError = error
-                showExportError = true
-              }
-            } label: {
-              Label("Export Compliance Logs", systemImage: "square.and.arrow.up")
-            }
-            .accessibilityIdentifier("ExportComplianceLogs")
-            .accessibilityLabel("Export Compliance Logs (Developer)")
-          }
-        #endif
-
-        if !visibleVideoItems.isEmpty {
-          Section("Library (\(visibleVideoItems.count) items)") {
-            ForEach(visibleVideoItems, id: \.identifier) { item in
-              HStack {
-                Image(systemName: item.isLocal ? "film" : "play.rectangle")
-                VStack(alignment: .leading) {
-                  Text(item.title)
-                    .font(.headline)
-                  if let channelID = item.channelID {
-                    Text("Channel: \(channelID)")
-                      .font(.caption)
-                      .foregroundStyle(.secondary)
-                  }
-                }
-              }
-              .contextMenu {
-                // Hide Channel action (YouTube videos only)
-                if !item.isLocal, let channelID = item.channelID {
-                  Button {
-                    initiateHideChannel(channelID: channelID, channelName: nil)
-                  } label: {
-                    Label("Hide Channel", systemImage: "eye.slash")
-                  }
-                  .accessibilityIdentifier("HideChannelAction")
-                }
-
-                // Report Content action (YouTube videos only)
-                if !item.isLocal, let videoID = item.videoID {
-                  Button {
-                    reportContent(videoID: videoID)
-                  } label: {
-                    Label("Report Content", systemImage: "exclamationmark.triangle")
-                  }
-                  .accessibilityIdentifier("ReportContentAction")
-                }
-              }
-            }
-          }
-        }
-      }
-      .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-      .navigationTitle("MyToob")
+      sidebarContent
     } detail: {
-      VStack {
-        Image(systemName: "play.rectangle.on.rectangle.fill")
-          .font(.system(size: 72))
-          .foregroundStyle(.secondary)
-        Text("Select an item from the sidebar")
-          .font(.title2)
-          .foregroundStyle(.secondary)
-        Text("Full UI coming in Epic F")
-          .font(.caption)
-          .foregroundStyle(.tertiary)
-      }
+      detailPlaceholder
     }
     .toolbar {
       ToolbarItem(placement: .automatic) {
@@ -278,43 +104,279 @@ struct ContentView: View {
           .environmentObject(syncViewModel)
       }
     }
-    .alert("Import Error", isPresented: $showImportError, presenting: importError) { _ in
-      Button("OK") {}
-    } message: { error in
-      Text(error.localizedDescription)
+  }
+
+  @ViewBuilder
+  private var detailPlaceholder: some View {
+    VStack {
+      Image(systemName: "play.rectangle.on.rectangle.fill")
+        .font(.system(size: 72))
+        .foregroundStyle(.secondary)
+      Text("Select an item from the sidebar")
+        .font(.title2)
+        .foregroundStyle(.secondary)
+      Text("Full UI coming in Epic F")
+        .font(.caption)
+        .foregroundStyle(.tertiary)
     }
-    .alert("Hide Channel?", isPresented: $showHideChannelDialog) {
-      TextField("Reason (optional)", text: $hideChannelReason)
-        .accessibilityIdentifier("HideChannelReasonField")
-      Button("Hide", role: .destructive) {
-        performHideChannel()
+  }
+
+  @ViewBuilder
+  private var sidebarContent: some View {
+    List {
+      collectionsSection
+      youtubeSection
+      localFilesSection
+      aboutSupportSection
+      #if DEBUG
+        developerToolsSection
+      #endif
+      librarySection
+    }
+    .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+    .navigationTitle("MyToob")
+  }
+
+  // MARK: - Sidebar Sections
+
+  @ViewBuilder
+  private var collectionsSection: some View {
+    Section {
+      Label("All Videos", systemImage: "play.rectangle.on.rectangle")
+      Label("Recently Watched", systemImage: "clock")
+      Label("Favorites", systemImage: "star")
+    } header: {
+      Text("Collections")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("CollectionsSection")
+    }
+  }
+
+  @ViewBuilder
+  private var youtubeSection: some View {
+    Section {
+      if oauth.isAuthenticated {
+        authenticatedYouTubeContent
+      } else {
+        unauthenticatedYouTubeContent
       }
-      Button("Cancel", role: .cancel) {
-        resetHideChannelState()
+    } header: {
+      youtubeSectionHeader
+    }
+  }
+
+  @ViewBuilder
+  private var authenticatedYouTubeContent: some View {
+    Label("Subscriptions", systemImage: "person.2")
+    Label("Playlists", systemImage: "list.bullet")
+
+    Button {
+      showSubscriptionsImport = true
+    } label: {
+      Label("Import Subscriptions", systemImage: "arrow.down.circle")
+    }
+    .accessibilityLabel("Import Subscriptions")
+    .accessibilityHint("Opens dialog to import YouTube subscriptions")
+
+    NavigationLink {
+      HiddenChannelsView()
+    } label: {
+      Label("Manage Hidden Channels", systemImage: "eye.slash.fill")
+    }
+    .accessibilityIdentifier("ManageHiddenChannels")
+    .accessibilityLabel("Manage Hidden Channels")
+    .accessibilityHint("View and unhide blocked YouTube channels")
+
+    Button {
+      Task {
+        try? oauth.signOut()
       }
-    } message: {
-      Text("Videos from \(channelDisplayName) will no longer appear in your library.")
+    } label: {
+      Label("Sign Out", systemImage: "person.crop.circle.badge.xmark")
     }
-    .alert("Error", isPresented: $showHideChannelError, presenting: hideChannelError) { _ in
-      Button("OK") {}
-    } message: { error in
-      Text(error.localizedDescription)
+    .foregroundStyle(.red)
+  }
+
+  @ViewBuilder
+  private var unauthenticatedYouTubeContent: some View {
+    Button {
+      showOAuthConsent = true
+    } label: {
+      Label("Connect YouTube Account", systemImage: "person.crop.circle.badge.plus")
     }
-    .sheet(isPresented: $showOAuthConsent) {
-      OAuthConsentView()
+    .accessibilityLabel("Connect YouTube Account")
+    .accessibilityHint("Opens consent screen to authorize YouTube access")
+  }
+
+  @ViewBuilder
+  private var youtubeSectionHeader: some View {
+    HStack(spacing: 6) {
+      if NSImage(named: "YouTube/Logo") != nil {
+        Image("YouTube/Logo")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(height: 14)
+          .accessibilityIdentifier("YouTubeSidebarLogo")
+      } else {
+        Image(systemName: "play.rectangle.fill")
+          .foregroundStyle(.red)
+          .accessibilityIdentifier("YouTubeSidebarLogo")
+      }
+      Text("YouTube")
     }
-    .sheet(isPresented: $showSubscriptionsImport) {
-      SubscriptionsImportView(modelContext: modelContext)
+    .accessibilityAddTraits(.isHeader)
+    .accessibilityIdentifier("YouTubeSection")
+  }
+
+  @ViewBuilder
+  private var localFilesSection: some View {
+    Section {
+      Label("All Local Videos", systemImage: "folder")
+        .accessibilityIdentifier("AllLocalVideos")
+
+      Button(action: importLocalFiles) {
+        Label("Import Local Files", systemImage: "plus.circle")
+      }
+      .disabled(isImporting)
+      .accessibilityLabel("Import Local Files")
+      .accessibilityIdentifier("ImportLocalFilesButton")
+      .accessibilityHint("Opens file picker to select video files to import")
+    } header: {
+      Text("Local Files")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("LocalFilesSection")
     }
-    .alert("Export Complete", isPresented: $showExportSuccess) {
-      Button("OK") {}
-    } message: {
-      Text("Compliance logs were exported to a JSON file.")
+  }
+
+  @ViewBuilder
+  private var aboutSupportSection: some View {
+    Section {
+      contentPolicyButton
+      contactSupportButton
+    } header: {
+      Text("About & Support")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("AboutSupportSection")
     }
-    .alert("Export Error", isPresented: $showExportError, presenting: exportError) { _ in
-      Button("OK") {}
-    } message: { error in
-      Text(error.localizedDescription)
+  }
+
+  @ViewBuilder
+  private var contentPolicyButton: some View {
+    Button {
+      if let url = AppConfig.contentPolicyURL {
+        NSWorkspace.shared.open(url)
+        ComplianceLogger.shared.logContentPolicyAccess(context: "sidebar")
+      } else {
+        #if DEBUG
+          print("Warning: MTContentPolicyURL not configured in Info.plist")
+        #endif
+      }
+    } label: {
+      Label("Content Policy", systemImage: "doc.text.magnifyingglass")
+    }
+    .disabled(AppConfig.contentPolicyURL == nil)
+    .accessibilityIdentifier("ContentPolicyLink")
+    .accessibilityLabel("Open Content Policy")
+  }
+
+  @ViewBuilder
+  private var contactSupportButton: some View {
+    Button {
+      if let email = AppConfig.supportEmail,
+        let url = URL(string: "mailto:\(email)?subject=MyToob%20Support")
+      {
+        NSWorkspace.shared.open(url)
+        ComplianceLogger.shared.logSupportContact(method: "email")
+      } else if let url = AppConfig.supportWebURL {
+        NSWorkspace.shared.open(url)
+        ComplianceLogger.shared.logSupportContact(method: "web")
+      } else {
+        #if DEBUG
+          print("Warning: MTSupportEmail/MTSupportWebURL not configured in Info.plist")
+        #endif
+      }
+    } label: {
+      Label("Contact Support", systemImage: "envelope")
+    }
+    .disabled(AppConfig.supportEmail == nil && AppConfig.supportWebURL == nil)
+    .accessibilityIdentifier("ContactSupportLink")
+    .accessibilityLabel("Contact Support")
+  }
+
+  #if DEBUG
+    @ViewBuilder
+    private var developerToolsSection: some View {
+      Section("Developer Tools") {
+        Button {
+          do {
+            let url = try ComplianceLogger.shared.exportComplianceLogs(sinceDays: 90)
+            exportedURL = url
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            showExportSuccess = true
+          } catch {
+            exportError = error
+            showExportError = true
+          }
+        } label: {
+          Label("Export Compliance Logs", systemImage: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("ExportComplianceLogs")
+        .accessibilityLabel("Export Compliance Logs (Developer)")
+      }
+    }
+  #endif
+
+  @ViewBuilder
+  private var librarySection: some View {
+    if !visibleVideoItems.isEmpty {
+      Section("Library (\(visibleVideoItems.count) items)") {
+        ForEach(visibleVideoItems, id: \.identifier) { item in
+          videoItemRow(for: item)
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func videoItemRow(for item: VideoItem) -> some View {
+    HStack {
+      Image(systemName: item.isLocal ? "film" : "play.rectangle")
+      VStack(alignment: .leading) {
+        Text(item.title)
+          .font(.headline)
+        if let channelID = item.channelID {
+          Text("Channel: \(channelID)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .accessibilityIdentifier("VideoItem_\(item.identifier)")
+    .contextMenu {
+      videoItemContextMenu(for: item)
+    }
+  }
+
+  @ViewBuilder
+  private func videoItemContextMenu(for item: VideoItem) -> some View {
+    // Hide Channel action (YouTube videos only)
+    if !item.isLocal, let channelID = item.channelID {
+      Button {
+        initiateHideChannel(channelID: channelID, channelName: nil)
+      } label: {
+        Label("Hide Channel", systemImage: "eye.slash")
+      }
+      .accessibilityIdentifier("HideChannelAction")
+    }
+
+    // Report Content action (YouTube videos only)
+    if !item.isLocal, let videoID = item.videoID {
+      Button {
+        initiateReportContent(videoID: videoID)
+      } label: {
+        Label("Report Content", systemImage: "exclamationmark.triangle")
+      }
+      .accessibilityIdentifier("ReportContentAction")
     }
   }
 
@@ -371,14 +433,161 @@ struct ContentView: View {
     hideChannelReason = ""
   }
 
-  /// Report content to YouTube
-  private func reportContent(videoID: String) {
-    // Open YouTube's report URL for the video
+  /// Initiate the report content flow with confirmation dialog
+  private func initiateReportContent(videoID: String) {
+    videoToReport = videoID
+    showReportContentDialog = true
+  }
+
+  /// Perform the actual report content action after user confirmation
+  private func performReportContent() {
+    guard let videoID = videoToReport else { return }
     let reportURLString = "https://www.youtube.com/watch?v=\(videoID)&report=1"
     if let url = URL(string: reportURLString) {
       NSWorkspace.shared.open(url)
       ComplianceLogger.shared.logContentReport(videoID: videoID)
     }
+    videoToReport = nil
+  }
+}
+
+// MARK: - ViewModifier for Alerts/Sheets
+
+/// A ViewModifier that encapsulates all alerts and sheets for ContentView
+/// This helps break up the complex view body to avoid Swift compiler type-check timeout
+private struct ContentViewAlerts: ViewModifier {
+  @Binding var showImportError: Bool
+  let importError: Error?
+  @Binding var showHideChannelDialog: Bool
+  @Binding var hideChannelReason: String
+  let channelDisplayName: String
+  let performHideChannel: () -> Void
+  let resetHideChannelState: () -> Void
+  @Binding var showHideChannelError: Bool
+  let hideChannelError: Error?
+  @Binding var showReportContentDialog: Bool
+  let performReportContent: () -> Void
+  let clearVideoToReport: () -> Void
+  @Binding var showOAuthConsent: Bool
+  @Binding var showSubscriptionsImport: Bool
+  let modelContext: ModelContext
+  @Binding var showExportSuccess: Bool
+  @Binding var showExportError: Bool
+  let exportError: Error?
+
+  func body(content: Content) -> some View {
+    content
+      .modifier(ImportErrorAlert(showImportError: $showImportError, importError: importError))
+      .modifier(HideChannelAlerts(
+        showHideChannelDialog: $showHideChannelDialog,
+        hideChannelReason: $hideChannelReason,
+        channelDisplayName: channelDisplayName,
+        performHideChannel: performHideChannel,
+        resetHideChannelState: resetHideChannelState,
+        showHideChannelError: $showHideChannelError,
+        hideChannelError: hideChannelError
+      ))
+      .modifier(ReportContentAlert(
+        showReportContentDialog: $showReportContentDialog,
+        performReportContent: performReportContent,
+        clearVideoToReport: clearVideoToReport
+      ))
+      .sheet(isPresented: $showOAuthConsent) {
+        OAuthConsentView()
+      }
+      .sheet(isPresented: $showSubscriptionsImport) {
+        SubscriptionsImportView(modelContext: modelContext)
+      }
+      .modifier(ExportAlerts(
+        showExportSuccess: $showExportSuccess,
+        showExportError: $showExportError,
+        exportError: exportError
+      ))
+  }
+}
+
+private struct ImportErrorAlert: ViewModifier {
+  @Binding var showImportError: Bool
+  let importError: Error?
+
+  func body(content: Content) -> some View {
+    content
+      .alert("Import Error", isPresented: $showImportError, presenting: importError) { _ in
+        Button("OK") {}
+      } message: { error in
+        Text(error.localizedDescription)
+      }
+  }
+}
+
+private struct HideChannelAlerts: ViewModifier {
+  @Binding var showHideChannelDialog: Bool
+  @Binding var hideChannelReason: String
+  let channelDisplayName: String
+  let performHideChannel: () -> Void
+  let resetHideChannelState: () -> Void
+  @Binding var showHideChannelError: Bool
+  let hideChannelError: Error?
+
+  func body(content: Content) -> some View {
+    content
+      .alert("Hide Channel?", isPresented: $showHideChannelDialog) {
+        TextField("Reason (optional)", text: $hideChannelReason)
+          .accessibilityIdentifier("HideChannelReasonField")
+        Button("Hide", role: .destructive) {
+          performHideChannel()
+        }
+        Button("Cancel", role: .cancel) {
+          resetHideChannelState()
+        }
+      } message: {
+        Text("Videos from \(channelDisplayName) will no longer appear in your library.")
+      }
+      .alert("Error", isPresented: $showHideChannelError, presenting: hideChannelError) { _ in
+        Button("OK") {}
+      } message: { error in
+        Text(error.localizedDescription)
+      }
+  }
+}
+
+private struct ReportContentAlert: ViewModifier {
+  @Binding var showReportContentDialog: Bool
+  let performReportContent: () -> Void
+  let clearVideoToReport: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .alert("Report Content?", isPresented: $showReportContentDialog) {
+        Button("Report on YouTube", role: .destructive) {
+          performReportContent()
+        }
+        Button("Cancel", role: .cancel) {
+          clearVideoToReport()
+        }
+      } message: {
+        Text("This will open YouTube in your browser where you can report this video for violating community guidelines.")
+      }
+  }
+}
+
+private struct ExportAlerts: ViewModifier {
+  @Binding var showExportSuccess: Bool
+  @Binding var showExportError: Bool
+  let exportError: Error?
+
+  func body(content: Content) -> some View {
+    content
+      .alert("Export Complete", isPresented: $showExportSuccess) {
+        Button("OK") {}
+      } message: {
+        Text("Compliance logs were exported to a JSON file.")
+      }
+      .alert("Export Error", isPresented: $showExportError, presenting: exportError) { _ in
+        Button("OK") {}
+      } message: { error in
+        Text(error.localizedDescription)
+      }
   }
 }
 
