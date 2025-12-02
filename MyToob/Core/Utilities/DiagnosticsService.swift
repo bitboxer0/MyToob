@@ -88,6 +88,28 @@ final class DiagnosticsService {
     let logsText = formatLogsAsText(report.recentLogs)
     try logsText.write(to: logsURL, atomically: true, encoding: .utf8)
 
+    // Include compliance logs directory (monthly rotated JSONL files)
+    let complianceLogsDir = ComplianceLogger.shared.logsDirectoryURL
+    if FileManager.default.fileExists(atPath: complianceLogsDir.path) {
+      let complianceLogsDest = tempDir.appendingPathComponent("compliance-logs", isDirectory: true)
+      do {
+        try FileManager.default.createDirectory(at: complianceLogsDest, withIntermediateDirectories: true)
+        let files = try FileManager.default.contentsOfDirectory(
+          at: complianceLogsDir, includingPropertiesForKeys: nil)
+        for file in files
+        where file.lastPathComponent.hasPrefix("compliance-") && file.pathExtension == "jsonl" {
+          try FileManager.default.copyItem(
+            at: file, to: complianceLogsDest.appendingPathComponent(file.lastPathComponent))
+        }
+      } catch {
+        // Non-fatal; proceed without compliance logs if copy fails
+        let logger = Logger(subsystem: "com.mytoob.app", category: "diagnostics")
+        logger.debug(
+          "Failed to include compliance logs directory in diagnostics: \(error.localizedDescription, privacy: .public)"
+        )
+      }
+    }
+
     // Create README
     let readmeURL = tempDir.appendingPathComponent("README.txt")
     let readme = """
@@ -97,6 +119,8 @@ final class DiagnosticsService {
       Contents:
       - diagnostic-report.json: Complete diagnostic data in JSON format
       - logs.txt: Recent application logs (last \(hours) hours)
+      - compliance-logs/: Directory containing monthly compliance audit logs (JSONL)
+        - compliance-YYYY-MM.jsonl: Compliance events for each month (90-day retention)
 
       App Information:
       - Version: \(report.appInfo.version) (\(report.appInfo.buildNumber))

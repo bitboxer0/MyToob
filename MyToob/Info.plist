@@ -6,6 +6,8 @@
 	<string>https://mytoob.app/legal/content-policy</string>
 	<key>MTSupportEmail</key>
 	<string>support@mytoob.app</string>
+	<key>MTSupportWebURL</key>
+	<string>https://mytoob.app/support</string>
 	<key>MTCompanyName</key>
 	<string>MyToob LLC</string>
 	<key>CFBundleURLTypes</key>
