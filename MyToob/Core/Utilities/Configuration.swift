@@ -19,6 +19,44 @@ import OSLog
 /// let clientSecret = Configuration.googleOAuthClientSecret
 /// ```
 enum Configuration {
+  // MARK: - Cache Configuration
+
+  /// Configuration constants for disk and memory caches
+  enum Cache {
+    /// Default TTL for metadata cache entries (7 days)
+    static let metadataTTL: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Maximum disk size for metadata cache (100 MB)
+    static let metadataDiskMaxBytes: Int = 100 * 1024 * 1024
+
+    /// Maximum disk size for thumbnail cache (500 MB)
+    static let thumbnailDiskMaxBytes: Int = 500 * 1024 * 1024
+
+    /// Default TTL for thumbnail cache entries when no Cache-Control (7 days)
+    static let thumbnailDefaultTTL: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Background eviction interval (1 hour)
+    static let evictionInterval: TimeInterval = 3600
+
+    /// Root directory name for caches within system Caches folder.
+    /// Derived from bundle identifier for consistency, with fallback for tests.
+    static var cacheRootDirName: String {
+      Bundle.main.bundleIdentifier ?? "com.finley.mytoob"
+    }
+
+    /// Subdirectory name for metadata cache
+    static let metadataSubdir = "MetadataCache"
+
+    /// Subdirectory name for thumbnail cache
+    static let thumbnailSubdir = "ThumbnailCache"
+
+    /// Maximum items in thumbnail memory cache
+    static let thumbnailMemoryItemsLimit = 1000
+
+    /// Maximum items in metadata memory cache (for CachingLayer)
+    static let metadataMemoryItemsLimit = 1000
+  }
+
   // MARK: - CloudKit Configuration
 
   /// CloudKit container identifier for iCloud sync.

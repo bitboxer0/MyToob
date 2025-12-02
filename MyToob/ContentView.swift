@@ -31,6 +31,10 @@ struct ContentView: View {
   @State private var hideChannelError: Error?
   @State private var showHideChannelError = false
 
+  // Cache management state
+  @State private var showClearCacheConfirmation = false
+  @State private var showCacheClearedAlert = false
+
   // Compliance export state (developer-only)
   @State private var exportError: Error?
   @State private var showExportError = false
@@ -149,6 +153,21 @@ struct ContentView: View {
           Text("Local Files")
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("LocalFilesSection")
+        }
+
+        Section {
+          Button(role: .destructive) {
+            showClearCacheConfirmation = true
+          } label: {
+            Label("Clear Caches", systemImage: "trash")
+          }
+          .accessibilityIdentifier("ClearCachesButton")
+          .accessibilityLabel("Clear Caches")
+          .accessibilityHint("Removes cached metadata and thumbnails to free up disk space")
+        } header: {
+          Text("Cache Management")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("CacheManagementSection")
         }
 
         // About & Support
@@ -305,6 +324,22 @@ struct ContentView: View {
     }
     .sheet(isPresented: $showSubscriptionsImport) {
       SubscriptionsImportView(modelContext: modelContext)
+    }
+    .confirmationDialog("Clear all caches?", isPresented: $showClearCacheConfirmation) {
+      Button("Clear Caches", role: .destructive) {
+        Task {
+          await CacheController.shared.clearAllCachesAsync()
+          showCacheClearedAlert = true
+        }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("This removes cached metadata and thumbnails. Does not affect your library.")
+    }
+    .alert("Caches Cleared", isPresented: $showCacheClearedAlert) {
+      Button("OK") {}
+    } message: {
+      Text("Metadata and thumbnail caches have been cleared.")
     }
     .alert("Export Complete", isPresented: $showExportSuccess) {
       Button("OK") {}
