@@ -31,6 +31,10 @@ struct ContentView: View {
   @State private var hideChannelError: Error?
   @State private var showHideChannelError = false
 
+  // Report content state
+  @State private var showReportContentDialog = false
+  @State private var videoToReport: String? = nil
+
   // Cache management state
   @State private var showClearCacheConfirmation = false
   @State private var showCacheClearedAlert = false
@@ -289,6 +293,7 @@ struct ContentView: View {
         }
       }
     }
+    .accessibilityIdentifier("VideoItem_\(item.identifier)")
     .contextMenu {
       videoItemContextMenu(item)
     }
@@ -296,6 +301,7 @@ struct ContentView: View {
 
   @ViewBuilder
   private func videoItemContextMenu(_ item: VideoItem) -> some View {
+    // Hide Channel action (YouTube videos only)
     if !item.isLocal, let channelID = item.channelID {
       Button {
         initiateHideChannel(channelID: channelID, channelName: nil)
@@ -305,9 +311,10 @@ struct ContentView: View {
       .accessibilityIdentifier("HideChannelAction")
     }
 
+    // Report Content action (YouTube videos only)
     if !item.isLocal, let videoID = item.videoID {
       Button {
-        reportContent(videoID: videoID)
+        initiateReportContent(videoID: videoID)
       } label: {
         Label("Report Content", systemImage: "exclamationmark.triangle")
       }
@@ -333,6 +340,35 @@ struct ContentView: View {
   // MARK: - Body
 
   var body: some View {
+    mainContent
+      .modifier(ContentViewAlerts(
+        showImportError: $showImportError,
+        importError: importError,
+        showHideChannelDialog: $showHideChannelDialog,
+        hideChannelReason: $hideChannelReason,
+        channelDisplayName: channelDisplayName,
+        performHideChannel: performHideChannel,
+        resetHideChannelState: resetHideChannelState,
+        showHideChannelError: $showHideChannelError,
+        hideChannelError: hideChannelError,
+        showReportContentDialog: $showReportContentDialog,
+        performReportContent: performReportContent,
+        clearVideoToReport: { videoToReport = nil },
+        showOAuthConsent: $showOAuthConsent,
+        showSubscriptionsImport: $showSubscriptionsImport,
+        modelContext: modelContext,
+        showClearCacheConfirmation: $showClearCacheConfirmation,
+        showCacheClearedAlert: $showCacheClearedAlert,
+        showExportSuccess: $showExportSuccess,
+        showExportError: $showExportError,
+        exportError: exportError
+      ))
+  }
+
+  // MARK: - Main Content
+
+  @ViewBuilder
+  private var mainContent: some View {
     NavigationSplitView {
       sidebarList
     } detail: {
@@ -344,25 +380,6 @@ struct ContentView: View {
           .environmentObject(syncViewModel)
       }
     }
-    .modifier(ContentViewAlerts(
-      showImportError: $showImportError,
-      importError: importError,
-      showHideChannelDialog: $showHideChannelDialog,
-      hideChannelReason: $hideChannelReason,
-      channelDisplayName: channelDisplayName,
-      performHideChannel: performHideChannel,
-      resetHideChannelState: resetHideChannelState,
-      showHideChannelError: $showHideChannelError,
-      hideChannelError: hideChannelError,
-      showOAuthConsent: $showOAuthConsent,
-      showSubscriptionsImport: $showSubscriptionsImport,
-      modelContext: modelContext,
-      showClearCacheConfirmation: $showClearCacheConfirmation,
-      showCacheClearedAlert: $showCacheClearedAlert,
-      showExportSuccess: $showExportSuccess,
-      showExportError: $showExportError,
-      exportError: exportError
-    ))
   }
 
   @ViewBuilder
@@ -435,20 +452,28 @@ struct ContentView: View {
     hideChannelReason = ""
   }
 
-  /// Report content to YouTube
-  private func reportContent(videoID: String) {
-    // Open YouTube's report URL for the video
+  /// Initiate the report content flow with confirmation dialog
+  private func initiateReportContent(videoID: String) {
+    videoToReport = videoID
+    showReportContentDialog = true
+  }
+
+  /// Perform the actual report content action after user confirmation
+  private func performReportContent() {
+    guard let videoID = videoToReport else { return }
     let reportURLString = "https://www.youtube.com/watch?v=\(videoID)&report=1"
     if let url = URL(string: reportURLString) {
       NSWorkspace.shared.open(url)
       ComplianceLogger.shared.logContentReport(videoID: videoID)
     }
+    videoToReport = nil
   }
 }
 
-// MARK: - ContentViewAlerts ViewModifier
+// MARK: - ViewModifier for Alerts/Sheets
 
-/// Extracted alerts to reduce body complexity and help the Swift type checker
+/// A ViewModifier that encapsulates all alerts and sheets for ContentView
+/// This helps break up the complex view body to avoid Swift compiler type-check timeout
 private struct ContentViewAlerts: ViewModifier {
   @Binding var showImportError: Bool
   let importError: Error?
@@ -459,6 +484,9 @@ private struct ContentViewAlerts: ViewModifier {
   let resetHideChannelState: () -> Void
   @Binding var showHideChannelError: Bool
   let hideChannelError: Error?
+  @Binding var showReportContentDialog: Bool
+  let performReportContent: () -> Void
+  let clearVideoToReport: () -> Void
   @Binding var showOAuthConsent: Bool
   @Binding var showSubscriptionsImport: Bool
   let modelContext: ModelContext
@@ -470,11 +498,64 @@ private struct ContentViewAlerts: ViewModifier {
 
   func body(content: Content) -> some View {
     content
+      .modifier(ImportErrorAlert(showImportError: $showImportError, importError: importError))
+      .modifier(HideChannelAlerts(
+        showHideChannelDialog: $showHideChannelDialog,
+        hideChannelReason: $hideChannelReason,
+        channelDisplayName: channelDisplayName,
+        performHideChannel: performHideChannel,
+        resetHideChannelState: resetHideChannelState,
+        showHideChannelError: $showHideChannelError,
+        hideChannelError: hideChannelError
+      ))
+      .modifier(ReportContentAlert(
+        showReportContentDialog: $showReportContentDialog,
+        performReportContent: performReportContent,
+        clearVideoToReport: clearVideoToReport
+      ))
+      .sheet(isPresented: $showOAuthConsent) {
+        OAuthConsentView()
+      }
+      .sheet(isPresented: $showSubscriptionsImport) {
+        SubscriptionsImportView(modelContext: modelContext)
+      }
+      .modifier(CacheManagementAlerts(
+        showClearCacheConfirmation: $showClearCacheConfirmation,
+        showCacheClearedAlert: $showCacheClearedAlert
+      ))
+      .modifier(ExportAlerts(
+        showExportSuccess: $showExportSuccess,
+        showExportError: $showExportError,
+        exportError: exportError
+      ))
+  }
+}
+
+private struct ImportErrorAlert: ViewModifier {
+  @Binding var showImportError: Bool
+  let importError: Error?
+
+  func body(content: Content) -> some View {
+    content
       .alert("Import Error", isPresented: $showImportError, presenting: importError) { _ in
         Button("OK") {}
       } message: { error in
         Text(error.localizedDescription)
       }
+  }
+}
+
+private struct HideChannelAlerts: ViewModifier {
+  @Binding var showHideChannelDialog: Bool
+  @Binding var hideChannelReason: String
+  let channelDisplayName: String
+  let performHideChannel: () -> Void
+  let resetHideChannelState: () -> Void
+  @Binding var showHideChannelError: Bool
+  let hideChannelError: Error?
+
+  func body(content: Content) -> some View {
+    content
       .alert("Hide Channel?", isPresented: $showHideChannelDialog) {
         TextField("Reason (optional)", text: $hideChannelReason)
           .accessibilityIdentifier("HideChannelReasonField")
@@ -492,12 +573,35 @@ private struct ContentViewAlerts: ViewModifier {
       } message: { error in
         Text(error.localizedDescription)
       }
-      .sheet(isPresented: $showOAuthConsent) {
-        OAuthConsentView()
+  }
+}
+
+private struct ReportContentAlert: ViewModifier {
+  @Binding var showReportContentDialog: Bool
+  let performReportContent: () -> Void
+  let clearVideoToReport: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .alert("Report Content?", isPresented: $showReportContentDialog) {
+        Button("Report on YouTube", role: .destructive) {
+          performReportContent()
+        }
+        Button("Cancel", role: .cancel) {
+          clearVideoToReport()
+        }
+      } message: {
+        Text("This will open YouTube in your browser where you can report this video for violating community guidelines.")
       }
-      .sheet(isPresented: $showSubscriptionsImport) {
-        SubscriptionsImportView(modelContext: modelContext)
-      }
+  }
+}
+
+private struct CacheManagementAlerts: ViewModifier {
+  @Binding var showClearCacheConfirmation: Bool
+  @Binding var showCacheClearedAlert: Bool
+
+  func body(content: Content) -> some View {
+    content
       .confirmationDialog("Clear all caches?", isPresented: $showClearCacheConfirmation) {
         Button("Clear Caches", role: .destructive) {
           Task {
@@ -514,6 +618,16 @@ private struct ContentViewAlerts: ViewModifier {
       } message: {
         Text("Metadata and thumbnail caches have been cleared.")
       }
+  }
+}
+
+private struct ExportAlerts: ViewModifier {
+  @Binding var showExportSuccess: Bool
+  @Binding var showExportError: Bool
+  let exportError: Error?
+
+  func body(content: Content) -> some View {
+    content
       .alert("Export Complete", isPresented: $showExportSuccess) {
         Button("OK") {}
       } message: {
