@@ -35,6 +35,10 @@ struct ContentView: View {
   @State private var showReportContentDialog = false
   @State private var videoToReport: String? = nil
 
+  // Cache management state
+  @State private var showClearCacheConfirmation = false
+  @State private var showCacheClearedAlert = false
+
   // Compliance export state (developer-only)
   @State private var exportError: Error?
   @State private var showExportError = false
@@ -65,79 +69,7 @@ struct ContentView: View {
     return "this channel"
   }
 
-  var body: some View {
-    mainContent
-      .modifier(ContentViewAlerts(
-        showImportError: $showImportError,
-        importError: importError,
-        showHideChannelDialog: $showHideChannelDialog,
-        hideChannelReason: $hideChannelReason,
-        channelDisplayName: channelDisplayName,
-        performHideChannel: performHideChannel,
-        resetHideChannelState: resetHideChannelState,
-        showHideChannelError: $showHideChannelError,
-        hideChannelError: hideChannelError,
-        showReportContentDialog: $showReportContentDialog,
-        performReportContent: performReportContent,
-        clearVideoToReport: { videoToReport = nil },
-        showOAuthConsent: $showOAuthConsent,
-        showSubscriptionsImport: $showSubscriptionsImport,
-        modelContext: modelContext,
-        showExportSuccess: $showExportSuccess,
-        showExportError: $showExportError,
-        exportError: exportError
-      ))
-  }
-
-  // MARK: - Main Content
-
-  @ViewBuilder
-  private var mainContent: some View {
-    NavigationSplitView {
-      sidebarContent
-    } detail: {
-      detailPlaceholder
-    }
-    .toolbar {
-      ToolbarItem(placement: .automatic) {
-        SyncStatusIndicatorView()
-          .environmentObject(syncViewModel)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var detailPlaceholder: some View {
-    VStack {
-      Image(systemName: "play.rectangle.on.rectangle.fill")
-        .font(.system(size: 72))
-        .foregroundStyle(.secondary)
-      Text("Select an item from the sidebar")
-        .font(.title2)
-        .foregroundStyle(.secondary)
-      Text("Full UI coming in Epic F")
-        .font(.caption)
-        .foregroundStyle(.tertiary)
-    }
-  }
-
-  @ViewBuilder
-  private var sidebarContent: some View {
-    List {
-      collectionsSection
-      youtubeSection
-      localFilesSection
-      aboutSupportSection
-      #if DEBUG
-        developerToolsSection
-      #endif
-      librarySection
-    }
-    .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-    .navigationTitle("MyToob")
-  }
-
-  // MARK: - Sidebar Sections
+  // MARK: - Sidebar Sections (extracted to help type checker)
 
   @ViewBuilder
   private var collectionsSection: some View {
@@ -153,20 +85,20 @@ struct ContentView: View {
   }
 
   @ViewBuilder
-  private var youtubeSection: some View {
+  private var youTubeSection: some View {
     Section {
       if oauth.isAuthenticated {
-        authenticatedYouTubeContent
+        youTubeAuthenticatedContent
       } else {
-        unauthenticatedYouTubeContent
+        youTubeUnauthenticatedContent
       }
     } header: {
-      youtubeSectionHeader
+      youTubeSectionHeader
     }
   }
 
   @ViewBuilder
-  private var authenticatedYouTubeContent: some View {
+  private var youTubeAuthenticatedContent: some View {
     Label("Subscriptions", systemImage: "person.2")
     Label("Playlists", systemImage: "list.bullet")
 
@@ -198,7 +130,7 @@ struct ContentView: View {
   }
 
   @ViewBuilder
-  private var unauthenticatedYouTubeContent: some View {
+  private var youTubeUnauthenticatedContent: some View {
     Button {
       showOAuthConsent = true
     } label: {
@@ -209,9 +141,9 @@ struct ContentView: View {
   }
 
   @ViewBuilder
-  private var youtubeSectionHeader: some View {
+  private var youTubeSectionHeader: some View {
     HStack(spacing: 6) {
-      if NSImage(named: "YouTube/Logo") != nil {
+      if let _ = NSImage(named: "YouTube/Logo") {
         Image("YouTube/Logo")
           .resizable()
           .aspectRatio(contentMode: .fit)
@@ -249,7 +181,25 @@ struct ContentView: View {
   }
 
   @ViewBuilder
-  private var aboutSupportSection: some View {
+  private var cacheManagementSection: some View {
+    Section {
+      Button(role: .destructive) {
+        showClearCacheConfirmation = true
+      } label: {
+        Label("Clear Caches", systemImage: "trash")
+      }
+      .accessibilityIdentifier("ClearCachesButton")
+      .accessibilityLabel("Clear Caches")
+      .accessibilityHint("Removes cached metadata and thumbnails to free up disk space")
+    } header: {
+      Text("Cache Management")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("CacheManagementSection")
+    }
+  }
+
+  @ViewBuilder
+  private var aboutAndSupportSection: some View {
     Section {
       contentPolicyButton
       contactSupportButton
@@ -266,10 +216,6 @@ struct ContentView: View {
       if let url = AppConfig.contentPolicyURL {
         NSWorkspace.shared.open(url)
         ComplianceLogger.shared.logContentPolicyAccess(context: "sidebar")
-      } else {
-        #if DEBUG
-          print("Warning: MTContentPolicyURL not configured in Info.plist")
-        #endif
       }
     } label: {
       Label("Content Policy", systemImage: "doc.text.magnifyingglass")
@@ -290,10 +236,6 @@ struct ContentView: View {
       } else if let url = AppConfig.supportWebURL {
         NSWorkspace.shared.open(url)
         ComplianceLogger.shared.logSupportContact(method: "web")
-      } else {
-        #if DEBUG
-          print("Warning: MTSupportEmail/MTSupportWebURL not configured in Info.plist")
-        #endif
       }
     } label: {
       Label("Contact Support", systemImage: "envelope")
@@ -331,14 +273,14 @@ struct ContentView: View {
     if !visibleVideoItems.isEmpty {
       Section("Library (\(visibleVideoItems.count) items)") {
         ForEach(visibleVideoItems, id: \.identifier) { item in
-          videoItemRow(for: item)
+          videoItemRow(item)
         }
       }
     }
   }
 
   @ViewBuilder
-  private func videoItemRow(for item: VideoItem) -> some View {
+  private func videoItemRow(_ item: VideoItem) -> some View {
     HStack {
       Image(systemName: item.isLocal ? "film" : "play.rectangle")
       VStack(alignment: .leading) {
@@ -353,12 +295,12 @@ struct ContentView: View {
     }
     .accessibilityIdentifier("VideoItem_\(item.identifier)")
     .contextMenu {
-      videoItemContextMenu(for: item)
+      videoItemContextMenu(item)
     }
   }
 
   @ViewBuilder
-  private func videoItemContextMenu(for item: VideoItem) -> some View {
+  private func videoItemContextMenu(_ item: VideoItem) -> some View {
     // Hide Channel action (YouTube videos only)
     if !item.isLocal, let channelID = item.channelID {
       Button {
@@ -378,6 +320,83 @@ struct ContentView: View {
       }
       .accessibilityIdentifier("ReportContentAction")
     }
+  }
+
+  @ViewBuilder
+  private var detailView: some View {
+    VStack {
+      Image(systemName: "play.rectangle.on.rectangle.fill")
+        .font(.system(size: 72))
+        .foregroundStyle(.secondary)
+      Text("Select an item from the sidebar")
+        .font(.title2)
+        .foregroundStyle(.secondary)
+      Text("Full UI coming in Epic F")
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+    }
+  }
+
+  // MARK: - Body
+
+  var body: some View {
+    mainContent
+      .modifier(ContentViewAlerts(
+        showImportError: $showImportError,
+        importError: importError,
+        showHideChannelDialog: $showHideChannelDialog,
+        hideChannelReason: $hideChannelReason,
+        channelDisplayName: channelDisplayName,
+        performHideChannel: performHideChannel,
+        resetHideChannelState: resetHideChannelState,
+        showHideChannelError: $showHideChannelError,
+        hideChannelError: hideChannelError,
+        showReportContentDialog: $showReportContentDialog,
+        performReportContent: performReportContent,
+        clearVideoToReport: { videoToReport = nil },
+        showOAuthConsent: $showOAuthConsent,
+        showSubscriptionsImport: $showSubscriptionsImport,
+        modelContext: modelContext,
+        showClearCacheConfirmation: $showClearCacheConfirmation,
+        showCacheClearedAlert: $showCacheClearedAlert,
+        showExportSuccess: $showExportSuccess,
+        showExportError: $showExportError,
+        exportError: exportError
+      ))
+  }
+
+  // MARK: - Main Content
+
+  @ViewBuilder
+  private var mainContent: some View {
+    NavigationSplitView {
+      sidebarList
+    } detail: {
+      detailView
+    }
+    .toolbar {
+      ToolbarItem(placement: .automatic) {
+        SyncStatusIndicatorView()
+          .environmentObject(syncViewModel)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var sidebarList: some View {
+    List {
+      collectionsSection
+      youTubeSection
+      localFilesSection
+      cacheManagementSection
+      aboutAndSupportSection
+      #if DEBUG
+        developerToolsSection
+      #endif
+      librarySection
+    }
+    .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+    .navigationTitle("MyToob")
   }
 
   // MARK: - Actions
@@ -471,6 +490,8 @@ private struct ContentViewAlerts: ViewModifier {
   @Binding var showOAuthConsent: Bool
   @Binding var showSubscriptionsImport: Bool
   let modelContext: ModelContext
+  @Binding var showClearCacheConfirmation: Bool
+  @Binding var showCacheClearedAlert: Bool
   @Binding var showExportSuccess: Bool
   @Binding var showExportError: Bool
   let exportError: Error?
@@ -498,6 +519,10 @@ private struct ContentViewAlerts: ViewModifier {
       .sheet(isPresented: $showSubscriptionsImport) {
         SubscriptionsImportView(modelContext: modelContext)
       }
+      .modifier(CacheManagementAlerts(
+        showClearCacheConfirmation: $showClearCacheConfirmation,
+        showCacheClearedAlert: $showCacheClearedAlert
+      ))
       .modifier(ExportAlerts(
         showExportSuccess: $showExportSuccess,
         showExportError: $showExportError,
@@ -567,6 +592,31 @@ private struct ReportContentAlert: ViewModifier {
         }
       } message: {
         Text("This will open YouTube in your browser where you can report this video for violating community guidelines.")
+      }
+  }
+}
+
+private struct CacheManagementAlerts: ViewModifier {
+  @Binding var showClearCacheConfirmation: Bool
+  @Binding var showCacheClearedAlert: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .confirmationDialog("Clear all caches?", isPresented: $showClearCacheConfirmation) {
+        Button("Clear Caches", role: .destructive) {
+          Task {
+            await CacheController.shared.clearAllCachesAsync()
+            showCacheClearedAlert = true
+          }
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("This removes cached metadata and thumbnails. Does not affect your library.")
+      }
+      .alert("Caches Cleared", isPresented: $showCacheClearedAlert) {
+        Button("OK") {}
+      } message: {
+        Text("Metadata and thumbnail caches have been cleared.")
       }
   }
 }
