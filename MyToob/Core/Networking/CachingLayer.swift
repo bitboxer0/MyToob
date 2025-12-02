@@ -8,13 +8,15 @@
 import Foundation
 import os
 
-/// HTTP response caching layer with ETag support and LRU eviction
+/// HTTP response caching layer with ETag support, LRU eviction, and disk persistence.
 ///
 /// **Features:**
+/// - Two-tier caching: memory (fast) + disk (persistent)
 /// - Stores API responses with ETags for validation caching
-/// - LRU eviction policy (1000-item limit)
-/// - TTL-based expiration (7-day maximum age)
+/// - LRU eviction policy (configurable item limit)
+/// - TTL-based expiration (configurable, default 7 days)
 /// - Cache hit/miss metrics for performance monitoring
+/// - Disk persistence survives app restarts
 ///
 /// **Usage:**
 /// ```swift
@@ -66,6 +68,8 @@ final class CachingLayer {
     let evictions: Int
     let currentSize: Int
     let maxSize: Int
+    let diskEntries: Int
+    let diskBytes: Int
 
     var hitRate: Double {
       let total = hits + misses
@@ -77,8 +81,11 @@ final class CachingLayer {
   // MARK: - Properties
 
   private var cache: [CacheKey: CacheEntry] = [:]
-  private let maxCacheSize = 1000
-  private let maxCacheAge: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+  private let maxCacheSize: Int
+  private let maxCacheAge: TimeInterval
+
+  // Disk store for persistence
+  private let diskStore: MetadataDiskCache
 
   // Metrics
   private var hits = 0
@@ -94,13 +101,41 @@ final class CachingLayer {
   // MARK: - Initialization
 
   private init() {
+    self.maxCacheSize = Configuration.Cache.metadataMemoryItemsLimit
+    self.maxCacheAge = Configuration.Cache.metadataTTL
+
+    // Initialize disk store
+    let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+      .appendingPathComponent(Configuration.Cache.cacheRootDirName)
+      .appendingPathComponent(Configuration.Cache.metadataSubdir, isDirectory: true)
+    self.diskStore = MetadataDiskCache(
+      directory: cachesDir,
+      maxBytes: Configuration.Cache.metadataDiskMaxBytes,
+      defaultTTL: Configuration.Cache.metadataTTL
+    )
+
     // Start background eviction timer (runs every hour)
     evictionTimer = Timer.scheduledTimer(
-      withTimeInterval: 3600,
+      withTimeInterval: Configuration.Cache.evictionInterval,
       repeats: true
     ) { [weak self] _ in
       self?.evictExpiredEntries()
     }
+  }
+
+  /// Test-only initializer for dependency injection.
+  /// - Parameters:
+  ///   - diskStore: Custom disk store for testing
+  ///   - maxCacheSize: Maximum memory cache size
+  ///   - maxCacheAge: Maximum cache age (TTL)
+  init(
+    diskStore: MetadataDiskCache,
+    maxCacheSize: Int = Configuration.Cache.metadataMemoryItemsLimit,
+    maxCacheAge: TimeInterval = Configuration.Cache.metadataTTL
+  ) {
+    self.diskStore = diskStore
+    self.maxCacheSize = maxCacheSize
+    self.maxCacheAge = maxCacheAge
   }
 
   deinit {
@@ -109,22 +144,25 @@ final class CachingLayer {
 
   // MARK: - Public API
 
-  /// Retrieve cached response for given key
+  /// Retrieve cached response for given key.
+  ///
+  /// Checks memory first, then falls back to disk cache.
+  /// Uses at most two barrier blocks to minimize lock contention:
+  /// 1. Memory lookup with metrics and LRU tracking
+  /// 2. Disk promotion and hit counting (only if disk hit)
+  ///
   /// - Parameter key: Cache key combining URL and query parameters
   /// - Returns: Cached entry if found and not expired, nil otherwise
   func getCachedResponse(for key: CacheKey) -> CacheEntry? {
-    return queue.sync {
-      guard var entry = cache[key] else {
-        misses += 1
-        LoggingService.shared.network.debug("Cache MISS for \(key.url, privacy: .public)")
-        return nil
-      }
+    // 1) Memory lookup under barrier (mutates cache, metrics)
+    if let memEntry = queue.sync(flags: .barrier, execute: { () -> CacheEntry? in
+      guard var entry = cache[key] else { return nil }
 
-      // Check if expired (7-day TTL)
+      // Check if expired (TTL)
       if Date().timeIntervalSince(entry.cachedAt) > maxCacheAge {
         cache.removeValue(forKey: key)
-        misses += 1
         evictions += 1
+        misses += 1
         LoggingService.shared.network.debug("Cache entry expired for \(key.url, privacy: .public)")
         return nil
       }
@@ -132,42 +170,81 @@ final class CachingLayer {
       // Update last accessed time (LRU tracking)
       entry.lastAccessedAt = Date()
       cache[key] = entry
-
       hits += 1
-      LoggingService.shared.network.debug("Cache HIT for \(key.url, privacy: .public)")
+      LoggingService.shared.network.debug("Memory cache HIT for \(key.url, privacy: .public)")
       return entry
+    }) {
+      return memEntry
     }
+
+    // 2) Disk lookup (outside lock - diskStore has its own synchronization)
+    guard let (diskEntry, _) = diskStore.loadEntry(for: key) else {
+      // Count miss exactly once
+      queue.sync(flags: .barrier) { misses += 1 }
+      LoggingService.shared.network.debug("Cache MISS for \(key.url, privacy: .public)")
+      return nil
+    }
+
+    // 3) Promote to memory + count hit
+    queue.sync(flags: .barrier) {
+      if cache.count >= maxCacheSize {
+        evictLRUEntry()
+      }
+      cache[key] = diskEntry
+      hits += 1
+    }
+    LoggingService.shared.network.debug("Disk cache HIT for \(key.url, privacy: .public)")
+    return diskEntry
   }
 
-  /// Retrieve stale cached response (ignores expiration) for offline fallback
+  /// Retrieve stale cached response (ignores expiration) for offline fallback.
+  ///
+  /// Checks memory first, then falls back to disk cache. Returns data regardless
+  /// of TTL expiration, suitable for degraded service when network is unavailable.
+  ///
   /// - Parameter key: Cache key combining URL and query parameters
   /// - Returns: Cached entry if found, regardless of expiration, nil otherwise
-  /// - Note: Used when network is unavailable to provide degraded service with stale data
+  /// - Note: All stale responses are tracked as "misses" in metrics since
+  ///   they represent degraded service rather than true cache hits.
   func getStaleCachedResponse(for key: CacheKey) -> CacheEntry? {
-    return queue.sync {
-      guard var entry = cache[key] else {
-        misses += 1
-        LoggingService.shared.network.debug("Stale cache MISS for \(key.url, privacy: .public)")
-        return nil
-      }
-
-      // Update last accessed time (LRU tracking)
+    // Memory stale path (ignore TTL)
+    if let mem = queue.sync(flags: .barrier, execute: { () -> CacheEntry? in
+      guard var entry = cache[key] else { return nil }
       entry.lastAccessedAt = Date()
       cache[key] = entry
-
-      // Track as miss for metrics (since it's stale data)
-      misses += 1
-
-      let age = Date().timeIntervalSince(entry.cachedAt)
-      LoggingService.shared.network.warning(
-        "Returning STALE cache for \(key.url, privacy: .public) (age: \(age / 3600, format: .fixed(precision: 1), privacy: .public)h)"
-      )
-
+      misses += 1  // Stale usage tracked as miss
       return entry
+    }) {
+      let age = Date().timeIntervalSince(mem.cachedAt)
+      LoggingService.shared.network.warning(
+        "Returning STALE memory cache for \(key.url, privacy: .public) (age: \(age / 3600, format: .fixed(precision: 1), privacy: .public)h)"
+      )
+      return mem
     }
+
+    // Disk stale path
+    if let (diskEntry, _) = diskStore.loadStaleEntry(for: key) {
+      queue.sync(flags: .barrier) {
+        cache[key] = diskEntry
+        misses += 1  // Stale usage tracked as miss
+      }
+
+      let age = Date().timeIntervalSince(diskEntry.cachedAt)
+      LoggingService.shared.network.warning(
+        "Returning STALE disk cache for \(key.url, privacy: .public) (age: \(age / 3600, format: .fixed(precision: 1), privacy: .public)h)"
+      )
+      return diskEntry
+    }
+
+    // Full miss
+    queue.sync(flags: .barrier) { misses += 1 }
+    LoggingService.shared.network.debug("Stale cache MISS for \(key.url, privacy: .public)")
+    return nil
   }
 
-  /// Cache response with ETag
+  /// Cache response with ETag.
+  ///
+  /// Writes to both memory and disk caches.
   /// - Parameters:
   ///   - key: Cache key
   ///   - data: Response body data
@@ -181,7 +258,7 @@ final class CachingLayer {
         self.evictLRUEntry()
       }
 
-      // Store new entry
+      // Store new entry in memory
       let entry = CacheEntry(
         responseData: data,
         etag: etag,
@@ -191,37 +268,61 @@ final class CachingLayer {
 
       self.cache[key] = entry
 
+      // Also persist to disk asynchronously
+      self.diskStore.saveEntry(entry, for: key)
+
       LoggingService.shared.network.debug(
         "Cached response for \(key.url, privacy: .public) with ETag: \(etag, privacy: .private)"
       )
     }
   }
 
-  /// Get current cache statistics
-  /// - Returns: Cache statistics including hit rate
+  /// Get current cache statistics including disk stats.
+  /// - Returns: Cache statistics including hit rate and disk usage
   func getCacheStats() -> CacheStats {
     return queue.sync {
+      let diskStats = diskStore.getStats()
       return CacheStats(
         hits: hits,
         misses: misses,
         evictions: evictions,
         currentSize: cache.count,
-        maxSize: maxCacheSize
+        maxSize: maxCacheSize,
+        diskEntries: diskStats.entries,
+        diskBytes: diskStats.totalBytes
       )
     }
   }
 
-  /// Clear all cached entries (useful for testing or manual cache reset)
-  func clearCache() {
-    queue.async(flags: .barrier) { [weak self] in
-      self?.cache.removeAll()
-      LoggingService.shared.network.info("Cache cleared - all entries removed")
+  /// Clear all cached entries (memory and disk).
+  ///
+  /// - Parameter waitUntilFinished: If true, blocks until clearing completes.
+  ///   Defaults to false for non-blocking behavior.
+  func clearCache(waitUntilFinished: Bool = false) {
+    let work = { [weak self] in
+      guard let self = self else { return }
+
+      // Clear memory
+      self.cache.removeAll()
+      self.hits = 0
+      self.misses = 0
+      self.evictions = 0
+
+      LoggingService.shared.network.info("Cache cleared - all entries removed (memory + disk)")
+    }
+
+    if waitUntilFinished {
+      queue.sync(flags: .barrier, execute: work)
+      diskStore.clear(waitUntilFinished: true)
+    } else {
+      queue.async(flags: .barrier, execute: work)
+      diskStore.clear(waitUntilFinished: false)
     }
   }
 
   // MARK: - Private Methods
 
-  /// Evict least recently used entry when cache is full
+  /// Evict least recently used entry when cache is full.
   private func evictLRUEntry() {
     // Find entry with oldest lastAccessedAt timestamp
     guard let lruKey = cache.min(by: { $0.value.lastAccessedAt < $1.value.lastAccessedAt })?.key else {
@@ -232,11 +333,13 @@ final class CachingLayer {
     evictions += 1
 
     LoggingService.shared.network.debug(
-      "Cache LRU eviction: removed \(lruKey.url, privacy: .public)"
+      "Memory cache LRU eviction: removed \(lruKey.url, privacy: .public)"
     )
   }
 
-  /// Evict all entries older than maxCacheAge (7 days)
+  /// Evict all entries older than maxCacheAge.
+  ///
+  /// Also triggers disk cache eviction.
   func evictExpiredEntries() {
     queue.async(flags: .barrier) { [weak self] in
       guard let self = self else { return }
@@ -244,12 +347,14 @@ final class CachingLayer {
       let now = Date()
       var expiredKeys: [CacheKey] = []
 
+      // Find expired memory entries
       for (key, entry) in self.cache {
         if now.timeIntervalSince(entry.cachedAt) > self.maxCacheAge {
           expiredKeys.append(key)
         }
       }
 
+      // Remove expired memory entries
       for key in expiredKeys {
         self.cache.removeValue(forKey: key)
         self.evictions += 1
@@ -257,21 +362,27 @@ final class CachingLayer {
 
       if !expiredKeys.isEmpty {
         LoggingService.shared.network.info(
-          "Cache TTL eviction: removed \(expiredKeys.count, privacy: .public) expired entries"
+          "Memory cache TTL eviction: removed \(expiredKeys.count, privacy: .public) expired entries"
         )
       }
 
-      // Log cache statistics periodically
+      // Also run disk eviction
+      self.diskStore.evictExpiredAndEnforceLRU()
+
+      // Log combined cache statistics
+      let diskStats = self.diskStore.getStats()
       let stats = CacheStats(
         hits: self.hits,
         misses: self.misses,
         evictions: self.evictions,
         currentSize: self.cache.count,
-        maxSize: self.maxCacheSize
+        maxSize: self.maxCacheSize,
+        diskEntries: diskStats.entries,
+        diskBytes: diskStats.totalBytes
       )
 
       LoggingService.shared.network.info(
-        "Cache stats: \(stats.hitRate, format: .fixed(precision: 1), privacy: .public)% hit rate (\(stats.hits) hits / \(stats.hits + stats.misses) requests), \(stats.currentSize) entries"
+        "Cache stats: \(stats.hitRate, format: .fixed(precision: 1), privacy: .public)% hit rate (\(stats.hits) hits / \(stats.hits + stats.misses) requests), memory: \(stats.currentSize) entries, disk: \(stats.diskEntries) entries (\(stats.diskBytes / 1024 / 1024) MB)"
       )
     }
   }
