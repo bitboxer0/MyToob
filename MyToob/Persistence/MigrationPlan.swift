@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os.log
 import SwiftData
 
 /// Migration plan orchestrating schema upgrades from V1 to latest version.
@@ -22,20 +23,11 @@ import SwiftData
 /// ## Migration Stages
 /// - **V1 → V2**: Lightweight migration adding optional `lastAccessedAt` property to VideoItem.
 ///
-/// ## Future Extensions
-/// For complex data transformations, use `MigrationStage.custom`:
-/// ```swift
-/// static let migrateV2toV3 = MigrationStage.custom(
-///     fromVersion: SchemaV2.self,
-///     toVersion: SchemaV3.self,
-///     willMigrate: { context in
-///         // Pre-migration logic (backup, validation)
-///     },
-///     didMigrate: { context in
-///         // Post-migration logic (data transformation, cleanup)
-///     }
-/// )
-/// ```
+/// ## Embedding Dimension Change (384 → 512)
+/// The embedding dimension change from 384 (Core ML) to 512 (Apple NLEmbedding) is a
+/// semantic change only - the Data storage format remains the same. Existing embeddings
+/// will be cleared at runtime when the EmbeddingService detects dimension mismatches,
+/// rather than requiring a schema migration.
 enum MyToobMigrationPlan: SchemaMigrationPlan {
 
   // MARK: - Schema History

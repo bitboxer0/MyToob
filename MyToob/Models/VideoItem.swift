@@ -46,7 +46,8 @@ final class VideoItem {
     }
   }
 
-  /// 384-dimensional embedding vector for semantic search (stored as Data)
+  /// 512-dimensional embedding vector for semantic search (stored as Data)
+  /// Uses Apple NLEmbedding sentence embeddings, L2-normalized.
   /// Nil until AI processing is complete
   @Attribute(.externalStorage) private var embeddingData: Data?
 

@@ -97,6 +97,8 @@ struct MyToobApp: App {
   @MainActor
   private static func buildModelContainer(cloudKitEnabled: Bool) -> ModelContainer {
     // Use versioned schema with migration plan for safe schema upgrades
+    // Note: Using SchemaV2 - embedding dimension change (384→512) is semantic only,
+    // the actual Data storage format is unchanged
     let schema = Schema(versionedSchema: SchemaV2.self)
 
     // Configure CloudKit sync if enabled
