@@ -7,6 +7,10 @@ import os.log
 /// This service provides thread-safe access to Apple's built-in sentence embedding model,
 /// which generates 512-dimensional semantic vectors for text.
 ///
+/// - Note: Currently supports **English text only** (`NLLanguage.english`). Non-English text
+///   may produce lower quality embeddings or unexpected results. Multi-language support
+///   may be added in future versions.
+///
 /// ## Usage
 /// ```swift
 /// let embedding = try await AppleSentenceEmbeddingService.shared.generateEmbedding(text: "Hello world")
@@ -57,38 +61,9 @@ public actor AppleSentenceEmbeddingService: EmbeddingServiceProtocol {
     /// - Throws: `EmbeddingError.modelUnavailable` if NLEmbedding is not available
     /// - Throws: `EmbeddingError.generationFailed` if vector generation fails
     public func generateEmbedding(text: String) async throws -> [Float] {
-        // Preprocess: trim whitespace
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Validate input
-        guard !cleaned.isEmpty else {
-            logger.debug("Empty input rejected")
-            throw EmbeddingError.emptyInput
-        }
-        
-        // Check model availability
-        guard let embedding = sentenceEmbedding else {
-            logger.error("Model unavailable when generating embedding")
-            throw EmbeddingError.modelUnavailable
-        }
-        
-        // Generate embedding
-        guard let vector = embedding.vector(for: cleaned) else {
-            logger.error("NLEmbedding returned nil for input: '\(cleaned.prefix(50))...'")
-            throw EmbeddingError.generationFailed(reason: "NLEmbedding returned nil for input")
-        }
-        
-        // Convert to Float and L2-normalize
-        var floats = vector.map(Float.init)
-        let norm = sqrt(floats.reduce(0) { $0 + $1 * $1 })
-        
-        if norm > 0 {
-            floats = floats.map { $0 / norm }
-        }
-        
-        logger.debug("Generated \(floats.count)-dim embedding for text (\(cleaned.count) chars)")
-        
-        return floats
+        let embedding = try generateEmbeddingSync(text: text)
+        logger.debug("Generated \(embedding.count)-dim embedding for text (\(text.count) chars)")
+        return embedding
     }
     
     /// Generate embeddings for multiple texts
@@ -102,15 +77,52 @@ public actor AppleSentenceEmbeddingService: EmbeddingServiceProtocol {
     public func generateEmbeddings(texts: [String]) async throws -> [[Float]] {
         var results: [[Float]] = []
         results.reserveCapacity(texts.count)
-        
+
+        // Process synchronously within actor to avoid actor reentrancy overhead
         for text in texts {
-            let embedding = try await generateEmbedding(text: text)
+            let embedding = try generateEmbeddingSync(text: text)
             results.append(embedding)
         }
-        
+
         logger.info("Generated \(results.count) embeddings in batch")
-        
+
         return results
+    }
+
+    // MARK: - Private Helpers
+
+    /// Synchronous embedding generation (for use within actor context)
+    ///
+    /// This avoids actor reentrancy overhead when processing batches.
+    private func generateEmbeddingSync(text: String) throws -> [Float] {
+        // Preprocess: trim whitespace
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Validate input
+        guard !cleaned.isEmpty else {
+            throw EmbeddingError.emptyInput
+        }
+
+        // Check model availability
+        guard let embedding = sentenceEmbedding else {
+            throw EmbeddingError.modelUnavailable
+        }
+
+        // Generate embedding
+        guard let vector = embedding.vector(for: cleaned) else {
+            logger.error("NLEmbedding returned nil for input (\(cleaned.count) characters)")
+            throw EmbeddingError.generationFailed(reason: "NLEmbedding returned nil for input")
+        }
+
+        // Convert to Float and L2-normalize
+        return normalizeVector(vector.map(Float.init))
+    }
+
+    /// L2-normalize a vector to unit length
+    private func normalizeVector(_ floats: [Float]) -> [Float] {
+        let norm = sqrt(floats.reduce(0) { $0 + $1 * $1 })
+        guard norm > 0 else { return floats }
+        return floats.map { $0 / norm }
     }
     
     /// Check if the embedding model is available

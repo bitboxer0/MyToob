@@ -162,29 +162,30 @@ final class AppleSentenceEmbeddingServiceTests: XCTestCase {
     }
     
     // MARK: - Test 9: Performance Under 10ms
-    
+
     func test_generateEmbedding_performanceUnder10ms() async throws {
         // Given
         let service = AppleSentenceEmbeddingService.shared
         let text = "Performance test sentence for embedding generation timing."
-        
+        let clock = ContinuousClock()
+
         // Warm up the model
         _ = try await service.generateEmbedding(text: "Warmup sentence.")
-        
+
         // When
         let iterations = 10
-        var totalTime: Double = 0
-        
+        var totalDuration: Duration = .zero
+
         for _ in 0..<iterations {
-            let start = CFAbsoluteTimeGetCurrent()
-            _ = try await service.generateEmbedding(text: text)
-            let end = CFAbsoluteTimeGetCurrent()
-            totalTime += (end - start)
+            let duration = try await clock.measure {
+                _ = try await service.generateEmbedding(text: text)
+            }
+            totalDuration += duration
         }
-        
-        let averageTime = totalTime / Double(iterations)
-        let averageTimeMs = averageTime * 1000
-        
+
+        let averageDuration = totalDuration / iterations
+        let averageTimeMs = Double(averageDuration.components.attoseconds) / 1e15
+
         // Then
         XCTAssertLessThan(averageTimeMs, 10.0, "Average embedding generation should be under 10ms (was \(averageTimeMs)ms)")
     }
