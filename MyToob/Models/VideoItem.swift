@@ -46,7 +46,8 @@ final class VideoItem {
     }
   }
 
-  /// 384-dimensional embedding vector for semantic search (stored as Data)
+  /// 512-dimensional embedding vector for semantic search (stored as Data)
+  /// Uses Apple NLEmbedding sentence embeddings, L2-normalized.
   /// Nil until AI processing is complete
   @Attribute(.externalStorage) private var embeddingData: Data?
 
@@ -71,6 +72,10 @@ final class VideoItem {
   /// Most recent time the user watched this item (nil if never watched)
   var lastWatchedAt: Date?
 
+  /// Most recent time this item was accessed (viewed in UI, searched, etc.)
+  /// Nil if never accessed.
+  var lastAccessedAt: Date?
+
   /// Relationship to user notes
   @Relationship(deleteRule: .cascade, inverse: \Note.videoItem) var notes: [Note]?
 
@@ -88,7 +93,8 @@ final class VideoItem {
     aiTopicTags: [String] = [],
     embedding: [Float]? = nil,
     addedAt: Date = Date(),
-    lastWatchedAt: Date? = nil
+    lastWatchedAt: Date? = nil,
+    lastAccessedAt: Date? = nil
   ) {
     self.videoID = videoID
     self.localURL = nil
@@ -105,6 +111,7 @@ final class VideoItem {
     }
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
+    self.lastAccessedAt = lastAccessedAt
     self.bookmarkData = nil  // YouTube videos don't need bookmarks
     self.notes = []  // Initialize empty notes array for relationship
   }
@@ -119,6 +126,7 @@ final class VideoItem {
     embedding: [Float]? = nil,
     addedAt: Date = Date(),
     lastWatchedAt: Date? = nil,
+    lastAccessedAt: Date? = nil,
     bookmarkData: Data? = nil
   ) {
     self.videoID = nil
@@ -136,6 +144,7 @@ final class VideoItem {
     }
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
+    self.lastAccessedAt = lastAccessedAt
     self.bookmarkData = bookmarkData
     self.notes = []  // Initialize empty notes array for relationship
   }
