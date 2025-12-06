@@ -96,10 +96,10 @@ struct MyToobApp: App {
   /// - Returns: A configured ModelContainer
   @MainActor
   private static func buildModelContainer(cloudKitEnabled: Bool) -> ModelContainer {
-    // Use versioned schema with migration plan for safe schema upgrades
-    // Note: Using SchemaV2 - embedding dimension change (384→512) is semantic only,
-    // the actual Data storage format is unchanged
-    let schema = Schema(versionedSchema: SchemaV2.self)
+    // Use the latest versioned schema for data persistence.
+    // Currently SchemaV2 - uses VideoItem with lastAccessedAt property.
+    // Migration plan is available but disabled until we have users who need migration.
+    let schema = latestSchema
 
     // Configure CloudKit sync if enabled
     let modelConfiguration: ModelConfiguration
@@ -123,13 +123,16 @@ struct MyToobApp: App {
     }
 
     do {
+      // Note: Migration plan is disabled until we have actual users who need migration.
+      // The versioned schema infrastructure is in place for future use.
+      // When ready to enable migrations, uncomment migrationPlan parameter below.
       let container = try ModelContainer(
         for: schema,
-        migrationPlan: MyToobMigrationPlan.self,
+        // migrationPlan: MyToobMigrationPlan.self,
         configurations: [modelConfiguration]
       )
       LoggingService.shared.persistence.info(
-        "ModelContainer initialized with migration plan (schema v\(SchemaV2.versionIdentifier.description, privacy: .public))"
+        "ModelContainer initialized (schema v\(CurrentSchemaVersion.versionIdentifier.description, privacy: .public))"
       )
       return container
     } catch {

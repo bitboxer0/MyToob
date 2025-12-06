@@ -7,9 +7,10 @@ import os.log
 /// This service provides thread-safe access to Apple's built-in sentence embedding model,
 /// which generates 512-dimensional semantic vectors for text.
 ///
-/// - Note: Currently supports **English text only** (`NLLanguage.english`). Non-English text
-///   may produce lower quality embeddings or unexpected results. Multi-language support
-///   may be added in future versions.
+/// ## Language Support
+/// This service currently uses the English sentence embedding model (`.english`).
+/// It is optimized for English text; embeddings for other languages may still be
+/// produced but with reduced semantic quality until additional language models are supported.
 ///
 /// ## Usage
 /// ```swift
