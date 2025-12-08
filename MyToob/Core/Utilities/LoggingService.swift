@@ -74,6 +74,10 @@ final class LoggingService {
   /// Use for: SwiftData operations, model migrations, storage errors
   let persistence: Logger
 
+  /// Logger for macOS system integrations
+  /// Use for: Spotlight indexing, App Intents, Handoff, system services
+  let integration: Logger
+
   // MARK: - Initialization
 
   private init() {
@@ -86,6 +90,7 @@ final class LoggingService {
     self.cloudKit = Logger(subsystem: subsystem, category: "cloudkit")
     self.ui = Logger(subsystem: subsystem, category: "ui")
     self.persistence = Logger(subsystem: subsystem, category: "persistence")
+    self.integration = Logger(subsystem: subsystem, category: "integration")
   }
 
   // MARK: - Log Level Guidelines

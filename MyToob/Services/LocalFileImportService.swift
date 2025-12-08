@@ -120,6 +120,12 @@ final class LocalFileImportService {
 
     // Insert into SwiftData
     modelContext.insert(videoItem)
+
+    // Fire-and-forget: Spotlight indexing failure shouldn't block import
+    // Errors are logged by SpotlightIndexer but don't propagate here
+    Task {
+      await SpotlightIndexer.shared.indexVideo(videoItem)
+    }
   }
 
   /// Create security-scoped bookmark for persistent file access

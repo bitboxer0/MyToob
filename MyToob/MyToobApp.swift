@@ -5,6 +5,7 @@
 //  Created by Claude Code (BMad Master) on 11/20/25.
 //
 
+import CoreSpotlight
 import OSLog
 import SwiftData
 import SwiftUI
@@ -19,6 +20,9 @@ struct MyToobApp: App {
 
   /// Dynamic model container that responds to sync settings changes
   @State private var sharedModelContainer: ModelContainer
+
+  /// Video identifier from Spotlight deep link (if any)
+  @State private var spotlightVideoIdentifier: String?
 
   init() {
     // Initialize syncViewModel with explicit settings injection to ensure proper init ordering
@@ -49,6 +53,11 @@ struct MyToobApp: App {
           Task {
             await syncViewModel.refreshStatus()
           }
+          // Handle launch arguments for testing
+          handleLaunchArguments()
+        }
+        .onContinueUserActivity(CSSearchableItemActionType) { userActivity in
+          handleSpotlightActivity(userActivity)
         }
     }
     .modelContainer(sharedModelContainer)
@@ -75,6 +84,14 @@ struct MyToobApp: App {
           .tag("sync")
           .accessibilityIdentifier("SettingsSyncTab")
 
+        // Spotlight Integration tab
+        SpotlightSettingsView()
+          .tabItem {
+            Label("Spotlight", systemImage: "magnifyingglass")
+          }
+          .tag("spotlight")
+          .accessibilityIdentifier("SettingsSpotlightTab")
+
         // About tab (Content Policy, etc.)
         AboutView()
           .tabItem {
@@ -86,6 +103,7 @@ struct MyToobApp: App {
       .frame(width: 500, height: 400)
       .accessibilityIdentifier("SettingsWindow")
     }
+    .modelContainer(sharedModelContainer)
   }
 
   // MARK: - Model Container Management
@@ -149,6 +167,66 @@ struct MyToobApp: App {
     sharedModelContainer = Self.buildModelContainer(cloudKitEnabled: cloudKitEnabled)
 
     LoggingService.shared.persistence.info("ModelContainer rebuilt successfully")
+  }
+
+  // MARK: - Spotlight Deep Link Handling
+
+  /// Handles Spotlight search result click activity
+  ///
+  /// When a user clicks on a Spotlight result for a MyToob video,
+  /// this method extracts the video identifier and navigates to it.
+  ///
+  /// - Parameter userActivity: The NSUserActivity from Spotlight
+  private func handleSpotlightActivity(_ userActivity: NSUserActivity) {
+    guard
+      let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+    else {
+      LoggingService.shared.integration.error(
+        "Spotlight activity missing video identifier"
+      )
+      return
+    }
+
+    LoggingService.shared.integration.info(
+      "Received Spotlight deep link for: \(identifier, privacy: .public)"
+    )
+
+    // Extract the actual video ID from the prefixed identifier
+    let videoID: String
+    if identifier.hasPrefix("video-") {
+      videoID = String(identifier.dropFirst("video-".count))
+    } else if identifier.hasPrefix("local-") {
+      videoID = String(identifier.dropFirst("local-".count))
+    } else {
+      videoID = identifier
+    }
+
+    // Store the identifier for navigation
+    spotlightVideoIdentifier = videoID
+
+    // TODO: Navigate to video detail view when implemented
+    // For now, log and store the identifier for future use
+    LoggingService.shared.integration.debug(
+      "Spotlight navigation target: \(videoID, privacy: .private)"
+    )
+  }
+
+  /// Handles launch arguments for UI testing
+  ///
+  /// Looks for `--spotlight-video-id` argument to simulate Spotlight deep links.
+  private func handleLaunchArguments() {
+    let arguments = ProcessInfo.processInfo.arguments
+
+    // Check for Spotlight test argument
+    if let spotlightIndex = arguments.firstIndex(of: "--spotlight-video-id"),
+      spotlightIndex + 1 < arguments.count
+    {
+      let videoID = arguments[spotlightIndex + 1]
+      LoggingService.shared.integration.debug(
+        "Test launch with Spotlight video ID: \(videoID, privacy: .private)"
+      )
+      spotlightVideoIdentifier = videoID
+    }
   }
 
   // MARK: - DEBUG Test Support
