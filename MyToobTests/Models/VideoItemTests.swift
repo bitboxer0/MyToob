@@ -99,9 +99,9 @@ struct VideoItemTests {
     #expect(videoItem.aiTopicTags.contains("Programming"))
   }
 
-  @Test("Embedding vector")
+  @Test("Embedding vector - 512 dimensions (Apple NLEmbedding)")
   func embeddingVector() async throws {
-    let embedding: [Float] = Array(repeating: 0.5, count: 384)
+    let embedding: [Float] = Array(repeating: 0.5, count: 512)
     let videoItem = VideoItem(
       videoID: "test123",
       title: "Test",
@@ -110,8 +110,111 @@ struct VideoItemTests {
       embedding: embedding
     )
 
-    #expect(videoItem.embedding?.count == 384)
+    #expect(videoItem.embedding?.count == 512)
     #expect(videoItem.embedding?.first == 0.5)
+  }
+
+  // MARK: - Epic 7 Field Tests
+
+  @Test("YouTube metadata fields for embedding generation")
+  func youTubeMetadataFields() async throws {
+    let thumbnailURL = URL(string: "https://i.ytimg.com/vi/test123/hqdefault.jpg")!
+    let publishDate = Date(timeIntervalSince1970: 1700000000)
+
+    let videoItem = VideoItem(
+      videoID: "test123",
+      title: "Swift Programming Tutorial",
+      channelID: "UC123456",
+      channelTitle: "Swift Academy",
+      videoDescription: "Learn Swift programming in this comprehensive tutorial.",
+      tags: ["Swift", "Programming", "iOS", "Tutorial"],
+      thumbnailURL: thumbnailURL,
+      publishedAt: publishDate,
+      duration: 3600.0
+    )
+
+    #expect(videoItem.channelTitle == "Swift Academy")
+    #expect(videoItem.videoDescription == "Learn Swift programming in this comprehensive tutorial.")
+    #expect(videoItem.tags.count == 4)
+    #expect(videoItem.tags.contains("Swift"))
+    #expect(videoItem.tags.contains("iOS"))
+    #expect(videoItem.thumbnailURL == thumbnailURL)
+    #expect(videoItem.publishedAt == publishDate)
+  }
+
+  @Test("Tags JSON encoding/decoding")
+  func tagsEncoding() async throws {
+    let videoItem = VideoItem(
+      videoID: "test123",
+      title: "Test",
+      channelID: nil,
+      tags: ["Tag1", "Tag2", "Tag3"],
+      duration: 300.0
+    )
+
+    // Verify initial tags
+    #expect(videoItem.tags.count == 3)
+    #expect(videoItem.tags == ["Tag1", "Tag2", "Tag3"])
+
+    // Modify tags
+    videoItem.tags = ["NewTag1", "NewTag2"]
+    #expect(videoItem.tags.count == 2)
+    #expect(videoItem.tags == ["NewTag1", "NewTag2"])
+
+    // Empty tags
+    videoItem.tags = []
+    #expect(videoItem.tags.isEmpty)
+  }
+
+  @Test("AI indexing state fields")
+  func aiIndexingStateFields() async throws {
+    let indexedAt = Date()
+
+    // Default values - new video needs indexing
+    let newVideo = VideoItem(
+      videoID: "new123",
+      title: "New Video",
+      channelID: nil,
+      duration: 300.0
+    )
+    #expect(newVideo.needsIndexing == true)
+    #expect(newVideo.lastIndexedAt == nil)
+
+    // Explicitly set indexing state
+    let indexedVideo = VideoItem(
+      videoID: "indexed123",
+      title: "Indexed Video",
+      channelID: nil,
+      duration: 300.0,
+      needsIndexing: false,
+      lastIndexedAt: indexedAt
+    )
+    #expect(indexedVideo.needsIndexing == false)
+    #expect(indexedVideo.lastIndexedAt == indexedAt)
+  }
+
+  @Test("Local file with thumbnail URL")
+  func localFileWithThumbnail() async throws {
+    let localURL = URL(fileURLWithPath: "/Users/test/video.mp4")
+    let thumbnailURL = URL(fileURLWithPath: "/Users/test/video_thumb.jpg")
+
+    let videoItem = VideoItem(
+      localURL: localURL,
+      title: "Local Video",
+      thumbnailURL: thumbnailURL,
+      duration: 600.0
+    )
+
+    #expect(videoItem.thumbnailURL == thumbnailURL)
+    #expect(videoItem.isLocal == true)
+    // Local files shouldn't have YouTube-specific fields
+    #expect(videoItem.channelTitle == nil)
+    #expect(videoItem.videoDescription == nil)
+    #expect(videoItem.tags.isEmpty)
+    #expect(videoItem.publishedAt == nil)
+    // But should have indexing state
+    #expect(videoItem.needsIndexing == true)
+    #expect(videoItem.lastIndexedAt == nil)
   }
 
   @Test("SwiftData persistence - YouTube video")

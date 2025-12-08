@@ -24,6 +24,10 @@ final class VideoItem {
   /// YouTube channel ID (nil for local files)
   var channelID: String?
 
+  /// YouTube channel name (nil for local files)
+  /// Used in embedding text generation for semantic search
+  var channelTitle: String?
+
   /// Total duration in seconds
   var duration: TimeInterval
 
@@ -32,6 +36,32 @@ final class VideoItem {
 
   /// Whether this is a local file (true) or YouTube video (false)
   var isLocal: Bool
+
+  /// YouTube video description (nil for local files)
+  /// Used in embedding text generation for semantic search
+  var videoDescription: String?
+
+  /// YouTube video tags (empty for local files)
+  /// Used in embedding text generation for semantic search
+  @Attribute(.externalStorage) private var tagsData = Data()
+
+  /// Computed property for accessing tags as String array
+  var tags: [String] {
+    get {
+      (try? JSONDecoder().decode([String].self, from: tagsData)) ?? []
+    }
+    set {
+      tagsData = (try? JSONEncoder().encode(newValue)) ?? Data()
+    }
+  }
+
+  /// URL of the video thumbnail (YouTube or local generated)
+  /// Used for OCR text extraction in embedding pipeline
+  var thumbnailURL: URL?
+
+  /// When the video was published (YouTube publish date)
+  /// Used for recency boosting in search ranking
+  var publishedAt: Date?
 
   /// AI-generated topic tags for organization (stored as Data)
   @Attribute(.externalStorage) private var aiTopicTagsData = Data()
@@ -76,6 +106,16 @@ final class VideoItem {
   /// Nil if never accessed.
   var lastAccessedAt: Date?
 
+  // MARK: - AI Indexing State
+
+  /// Whether this video needs to be (re)indexed in the HNSW vector index
+  /// Set to true when: new video added, embedding regenerated, metadata changed
+  var needsIndexing: Bool = true
+
+  /// When this video was last indexed in the HNSW vector index
+  /// Nil if never indexed
+  var lastIndexedAt: Date?
+
   /// Relationship to user notes
   @Relationship(deleteRule: .cascade, inverse: \Note.videoItem) var notes: [Note]?
 
@@ -88,18 +128,30 @@ final class VideoItem {
     videoID: String,
     title: String,
     channelID: String?,
+    channelTitle: String? = nil,
+    videoDescription: String? = nil,
+    tags: [String] = [],
+    thumbnailURL: URL? = nil,
+    publishedAt: Date? = nil,
     duration: TimeInterval,
     watchProgress: TimeInterval = 0,
     aiTopicTags: [String] = [],
     embedding: [Float]? = nil,
     addedAt: Date = Date(),
     lastWatchedAt: Date? = nil,
-    lastAccessedAt: Date? = nil
+    lastAccessedAt: Date? = nil,
+    needsIndexing: Bool = true,
+    lastIndexedAt: Date? = nil
   ) {
     self.videoID = videoID
     self.localURL = nil
     self.title = title
     self.channelID = channelID
+    self.channelTitle = channelTitle
+    self.videoDescription = videoDescription
+    self.tagsData = (try? JSONEncoder().encode(tags)) ?? Data()
+    self.thumbnailURL = thumbnailURL
+    self.publishedAt = publishedAt
     self.duration = duration
     self.watchProgress = watchProgress
     self.isLocal = false
@@ -112,6 +164,8 @@ final class VideoItem {
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
     self.lastAccessedAt = lastAccessedAt
+    self.needsIndexing = needsIndexing
+    self.lastIndexedAt = lastIndexedAt
     self.bookmarkData = nil  // YouTube videos don't need bookmarks
     self.notes = []  // Initialize empty notes array for relationship
   }
@@ -120,6 +174,7 @@ final class VideoItem {
   init(
     localURL: URL,
     title: String,
+    thumbnailURL: URL? = nil,
     duration: TimeInterval,
     watchProgress: TimeInterval = 0,
     aiTopicTags: [String] = [],
@@ -127,12 +182,19 @@ final class VideoItem {
     addedAt: Date = Date(),
     lastWatchedAt: Date? = nil,
     lastAccessedAt: Date? = nil,
+    needsIndexing: Bool = true,
+    lastIndexedAt: Date? = nil,
     bookmarkData: Data? = nil
   ) {
     self.videoID = nil
     self.localURL = localURL
     self.title = title
     self.channelID = nil
+    self.channelTitle = nil
+    self.videoDescription = nil
+    self.tagsData = Data()
+    self.thumbnailURL = thumbnailURL
+    self.publishedAt = nil  // Local files don't have publish date
     self.duration = duration
     self.watchProgress = watchProgress
     self.isLocal = true
@@ -145,6 +207,8 @@ final class VideoItem {
     self.addedAt = addedAt
     self.lastWatchedAt = lastWatchedAt
     self.lastAccessedAt = lastAccessedAt
+    self.needsIndexing = needsIndexing
+    self.lastIndexedAt = lastIndexedAt
     self.bookmarkData = bookmarkData
     self.notes = []  // Initialize empty notes array for relationship
   }
