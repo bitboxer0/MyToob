@@ -256,7 +256,7 @@ struct CloudKitContainerTests {
     }
 
     // Arrange: Create schema and configuration with CloudKit
-    let schema = Schema(versionedSchema: SchemaV2.self)
+    let schema = Schema(versionedSchema: CurrentSchemaVersion.self)
     let modelConfiguration = ModelConfiguration(
       schema: schema,
       isStoredInMemoryOnly: true,  // Use in-memory for test isolation
@@ -264,9 +264,9 @@ struct CloudKitContainerTests {
     )
 
     // Act: Create ModelContainer with CloudKit configuration
+    // Note: Migration plan is disabled, so we don't pass it here
     let modelContainer = try ModelContainer(
       for: schema,
-      migrationPlan: MyToobMigrationPlan.self,
       configurations: [modelConfiguration]
     )
 
@@ -280,7 +280,7 @@ struct CloudKitContainerTests {
 
     // The container should be usable
     let context = ModelContext(modelContainer)
-    let descriptor = FetchDescriptor<VideoItemV2>(sortBy: [])
+    let descriptor = FetchDescriptor<VideoItem>(sortBy: [])
     let results = try context.fetch(descriptor)
     #expect(results.isEmpty, "Fresh container should have no data")
   }
