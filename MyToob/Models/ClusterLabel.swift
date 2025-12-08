@@ -19,8 +19,8 @@ final class ClusterLabel {
   /// Generated via keyword extraction + centroid terms
   var label: String
 
-  /// 384-dimensional centroid vector representing the cluster's semantic center
-  /// Stored as Data for SwiftData compatibility
+  /// 512-dimensional centroid vector representing the cluster's semantic center
+  /// Uses Apple NLEmbedding dimensions, stored as Data for SwiftData compatibility
   @Attribute(.externalStorage) private var centroidData = Data()
 
   /// Computed property for accessing centroid as Float array

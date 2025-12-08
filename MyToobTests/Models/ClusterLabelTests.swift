@@ -15,7 +15,7 @@ import Testing
 struct ClusterLabelTests {
   @Test("Create cluster label")
   func createClusterLabel() async throws {
-    let centroid: [Float] = Array(repeating: 0.5, count: 384)
+    let centroid: [Float] = Array(repeating: 0.5, count: 512)
     let cluster = ClusterLabel(
       clusterID: "cluster-001",
       label: "Swift Programming",
@@ -26,7 +26,7 @@ struct ClusterLabelTests {
 
     #expect(cluster.clusterID == "cluster-001")
     #expect(cluster.label == "Swift Programming")
-    #expect(cluster.centroid.count == 384)
+    #expect(cluster.centroid.count == 512)
     #expect(cluster.itemCount == 42)
     #expect(cluster.confidenceScore == 0.85)
   }
@@ -118,7 +118,7 @@ struct ClusterLabelTests {
     )
     let context = ModelContext(container)
 
-    let centroid: [Float] = Array(repeating: 0.75, count: 384)
+    let centroid: [Float] = Array(repeating: 0.75, count: 512)
     let cluster = ClusterLabel(
       clusterID: "persist-001",
       label: "SwiftUI Tutorials",
@@ -140,7 +140,7 @@ struct ClusterLabelTests {
     #expect(fetchedClusters.first?.label == "SwiftUI Tutorials")
     #expect(fetchedClusters.first?.itemCount == 15)
     #expect(fetchedClusters.first?.confidenceScore == 0.92)
-    #expect(fetchedClusters.first?.centroid.count == 384)
+    #expect(fetchedClusters.first?.centroid.count == 512)
   }
 
   @Test("Delete cluster label")

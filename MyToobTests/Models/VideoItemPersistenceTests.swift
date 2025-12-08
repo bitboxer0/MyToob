@@ -275,8 +275,8 @@ struct VideoItemPersistenceTests {
     // Arrange
     let (_, context) = try createTestContainer()
 
-    // Create 384-dimensional embedding (as specified in VideoItem)
-    let embedding: [Float] = (0..<384).map { Float($0) / 384.0 }
+    // Create 512-dimensional embedding (Apple NLEmbedding output)
+    let embedding: [Float] = (0..<512).map { Float($0) / 512.0 }
 
     let videoItem = VideoItem(
       videoID: "embedding_test_123",
@@ -298,15 +298,15 @@ struct VideoItemPersistenceTests {
 
     #expect(results.count == 1, "Should have exactly one item")
     #expect(results.first?.embedding != nil, "Embedding should not be nil")
-    #expect(results.first?.embedding?.count == 384, "Embedding should have 384 dimensions")
+    #expect(results.first?.embedding?.count == 512, "Embedding should have 512 dimensions")
 
     // Verify embedding values
     if let fetchedEmbedding = results.first?.embedding {
       #expect(
         abs(fetchedEmbedding[0] - 0.0) < 0.001, "First embedding value should be approximately 0")
       #expect(
-        abs(fetchedEmbedding[383] - (383.0 / 384.0)) < 0.001,
-        "Last embedding value should be approximately 0.997")
+        abs(fetchedEmbedding[511] - (511.0 / 512.0)) < 0.001,
+        "Last embedding value should be approximately 0.998")
     }
   }
 
