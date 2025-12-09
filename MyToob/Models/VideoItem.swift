@@ -249,3 +249,32 @@ extension VideoItem {
     return blacklist.contains { $0.channelID == channelID }
   }
 }
+
+// MARK: - Embedding Text Generation (Story 7.2)
+
+extension VideoItem {
+  /// Generate embedding-ready text from video metadata.
+  ///
+  /// Combines title, channel name, tags, and description into optimized text
+  /// for Apple's NLEmbedding sentence model. Text is cleaned, filtered, and
+  /// truncated to the target length.
+  ///
+  /// - Parameter ocrText: Optional OCR-extracted text from thumbnail (Story 7.3)
+  /// - Returns: Cleaned, prioritized text suitable for NLEmbedding input
+  ///
+  /// ## Example
+  /// ```swift
+  /// let text = videoItem.embeddingText()
+  /// let embedding = try await embeddingService.generateEmbedding(text: text)
+  /// videoItem.embedding = embedding
+  /// ```
+  func embeddingText(ocrText: String? = nil) -> String {
+    MetadataTextBuilder.buildText(
+      title: title,
+      channelName: channelTitle,
+      tags: tags.isEmpty ? nil : tags,
+      description: videoDescription,
+      ocrText: ocrText
+    )
+  }
+}
